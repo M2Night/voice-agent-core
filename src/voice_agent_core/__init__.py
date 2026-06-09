@@ -24,6 +24,7 @@ from voice_agent_core.config import (
     load_yaml,
 )
 from voice_agent_core.fish import FishSTT, FishTTS, build_fish_stt, build_fish_tts
+from voice_agent_core.llm import build_llm
 from voice_agent_core.observability import (
     MetricNames,
     configure_logging,
@@ -49,6 +50,7 @@ __all__ = [
     "__version__",
     "build_fish_stt",
     "build_fish_tts",
+    "build_llm",
     "configure_logging",
     "configure_metrics",
     "get_logger",
