@@ -23,6 +23,7 @@ from voice_agent_core.config import (
     load_env_walking_up,
     load_yaml,
 )
+from voice_agent_core.fish import FishSTT, FishTTS, build_fish_stt, build_fish_tts
 from voice_agent_core.observability import (
     MetricNames,
     configure_logging,
@@ -37,6 +38,8 @@ __version__ = "0.1.0"
 
 __all__ = [
     "BaseAgentSettings",
+    "FishSTT",
+    "FishTTS",
     "LLMBackend",
     "LogFormat",
     "LogLevel",
@@ -44,6 +47,8 @@ __all__ = [
     "OTelExporter",
     "TTSLatencyMode",
     "__version__",
+    "build_fish_stt",
+    "build_fish_tts",
     "configure_logging",
     "configure_metrics",
     "get_logger",
