@@ -55,6 +55,27 @@ A successful run proves:
 | `Playback failed` in Playground | Browser audio output muted/restricted |
 | High `stream_open_to_audio_ms` | Network latency to Fish — check `fish_tts.metrics.ttfb_ms` to isolate |
 
-## Want notifications?
+## Slack notification on session end
 
-This example doesn't use `SlackNotifier`. To exercise that path too, add a `@function_tool` that calls `notifier.send(...)` on a Slack-configured notifier — see `voice_agent_core/notify.py` docstring for usage.
+The smoke agent registers a shutdown callback via `ctx.add_shutdown_callback`. When a session ends (participant disconnects, room closes, etc.), one Slack notification fires per session — concurrent users yield independent notifications because each session runs in its own subprocess.
+
+To enable real Slack delivery, set `SLACK_WEBHOOK_URL` in `examples/.env` to your incoming-webhook URL. Without it, the notifier falls back to **dev mode** — it logs the payload to stdout (event `notify.dev_mode`) instead of making an HTTP call, so you can still see what *would* have been sent.
+
+What you should see in the configured Slack channel after hanging up:
+
+```
+✅ Smoke session ended
+
+Room `console-98e122e5` ended after 45.3s.
+
+Room: console-98e122e5  |  Duration: 45.3 s  |  Reason: participant_disconnected
+```
+
+## Concurrency
+
+This agent serves multiple users concurrently. Each user's session runs in a
+separate subprocess (forked from the worker), with its own `SmokeAgent`
+instance, `AgentSession`, and Fish/LLM connections. State is fully isolated;
+the shutdown callback fires once per session. To scale beyond one worker,
+launch additional worker processes — LiveKit Cloud routes jobs across all
+registered workers.
