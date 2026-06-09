@@ -25,6 +25,11 @@ from voice_agent_core.config import (
 )
 from voice_agent_core.fish import FishSTT, FishTTS, build_fish_stt, build_fish_tts
 from voice_agent_core.llm import build_llm
+from voice_agent_core.notify import (
+    NotificationField,
+    NotificationPayload,
+    SlackNotifier,
+)
 from voice_agent_core.pipeline import PipelineComponents, build_pipeline
 from voice_agent_core.observability import (
     MetricNames,
@@ -46,8 +51,11 @@ __all__ = [
     "LogFormat",
     "LogLevel",
     "MetricNames",
+    "NotificationField",
+    "NotificationPayload",
     "OTelExporter",
     "PipelineComponents",
+    "SlackNotifier",
     "TTSLatencyMode",
     "__version__",
     "build_fish_stt",
