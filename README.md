@@ -24,6 +24,10 @@ For production / published consumers, pin to a tagged version:
 uv add "voice-agent-core @ git+https://github.com/M2Night/voice-agent-core.git@v0.1.0"
 ```
 
+## Examples
+
+See [examples/README.md](examples/README.md) — a minimum runnable agent you can run locally to verify the library end-to-end, and copy as a starting template.
+
 ## Status
 
 Pre-1.0. Breaking changes possible until v1.0.0. Pin to a specific git tag in production.
