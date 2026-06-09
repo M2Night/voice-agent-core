@@ -40,15 +40,28 @@ def configure_logging(level: LogLevel = "INFO", format: LogFormat = "json") -> N
     """Configure structlog. Idempotent — safe to call multiple times.
 
     With ``format='json'`` each log line is a single JSON object suitable for any
-    log aggregator. With ``format='console'`` lines are colorized and human-readable
-    for local development.
+    log aggregator; timestamps are ISO 8601 UTC. With ``format='console'`` lines
+    are colorized and human-readable for local development; timestamps are
+    ``HH:MM:SS.us`` local time so they align visually with LiveKit's own
+    stdlib-logger formatter when both appear in the same terminal.
+
+    Note: this configures *our* structlog only. LiveKit's stdlib loggers
+    (``livekit.agents``, ``livekit_api::*`` Rust SDK) are independent and follow
+    their own conventions — in particular, ``cli dev`` defaults to DEBUG.
     """
     log_level = getattr(logging, level.upper(), logging.INFO)
+
+    # Short local time for console (visually aligns with LiveKit's own logger);
+    # ISO 8601 UTC for JSON (machine-friendly for log aggregators).
+    if format == "json":
+        timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
+    else:
+        timestamper = structlog.processors.TimeStamper(fmt="%H:%M:%S.%f", utc=False)
 
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        timestamper,
         structlog.processors.StackInfoRenderer(),
         structlog.dev.set_exc_info,
     ]
