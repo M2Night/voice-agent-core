@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "voice-agent-core"
 version = "0.1.0"
-description = "Shared infrastructure for Fish Audio voice agent demos: LiveKit integration, Fish Audio STT/TTS adapters, notifiers, observability"
+description = "Shared infrastructure for Fish Audio voice agents: LiveKit integration, Fish Audio STT/TTS adapters, notifiers, observability"
 readme = "README.md"
 requires-python = ">=3.10, <3.15"
 license = { text = "MIT" }

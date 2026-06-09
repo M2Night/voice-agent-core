@@ -30,4 +30,4 @@ Pre-1.0. Breaking changes possible until v1.0.0. Pin to a specific git tag in pr
 
 ## Used by
 
-- [fish-voice-demos](https://github.com/M2Night/fish-voice-demos) — the 5 demo apps
+- [fish-voice-demos](https://github.com/M2Night/fish-voice-demos) — 5 production voice agents built on this library
