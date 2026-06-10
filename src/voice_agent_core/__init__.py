@@ -31,6 +31,13 @@ from voice_agent_core.notify import (
     SlackNotifier,
 )
 from voice_agent_core.pipeline import PipelineComponents, build_pipeline
+from voice_agent_core.runtime import (
+    build_session,
+    default_prewarm,
+    default_room_options,
+    is_warmup_session,
+    warm_tts,
+)
 from voice_agent_core.transcript import (
     DEFAULT_SUMMARY_INSTRUCTION,
     format_transcript,
@@ -46,7 +53,7 @@ from voice_agent_core.observability import (
     shutdown_observability,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "DEFAULT_SUMMARY_INSTRUCTION",
@@ -68,14 +75,19 @@ __all__ = [
     "build_fish_tts",
     "build_llm",
     "build_pipeline",
+    "build_session",
     "configure_logging",
     "configure_metrics",
+    "default_prewarm",
+    "default_room_options",
     "format_transcript",
     "get_logger",
     "get_meter",
+    "is_warmup_session",
     "load_env_walking_up",
     "load_yaml",
     "setup_observability",
     "shutdown_observability",
     "summarize_transcript",
+    "warm_tts",
 ]
