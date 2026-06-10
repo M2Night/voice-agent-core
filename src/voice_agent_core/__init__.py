@@ -53,7 +53,7 @@ from voice_agent_core.observability import (
     shutdown_observability,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "DEFAULT_SUMMARY_INSTRUCTION",

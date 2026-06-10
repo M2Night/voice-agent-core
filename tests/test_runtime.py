@@ -97,16 +97,23 @@ class TestBuildSession:
         assert kwargs["turn_handling"]["turn_detection"] is pipeline.turn_detection
 
     def test_preemptive_generation_defaults_true(self) -> None:
+        """preemptive_generation lives inside TurnHandlingOptions in livekit-agents
+        v1.5+ (passing it directly to AgentSession was deprecated, removed in v2).
+        Default should still surface as enabled=True so existing demos don't
+        need to change their build_session calls."""
         pipeline = self._fake_pipeline()
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline)
-        assert agent_session_cls.call_args.kwargs["preemptive_generation"] is True
+        kwargs = agent_session_cls.call_args.kwargs
+        assert "preemptive_generation" not in kwargs  # NOT at AgentSession level
+        assert kwargs["turn_handling"]["preemptive_generation"]["enabled"] is True
 
     def test_preemptive_generation_can_be_disabled(self) -> None:
         pipeline = self._fake_pipeline()
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline, preemptive_generation=False)
-        assert agent_session_cls.call_args.kwargs["preemptive_generation"] is False
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"]["preemptive_generation"]["enabled"] is False
 
     def test_extra_kwargs_passed_through(self) -> None:
         pipeline = self._fake_pipeline()
@@ -116,9 +123,10 @@ class TestBuildSession:
 
 
 class TestWarmTts:
-    """warm_tts should drive a tiny streaming synth through the streaming path
-    (not the synthesize HTTP path) so the connection pool that session.say
-    uses actually gets warmed."""
+    """warm_tts is kept in the public API for future use with TTS providers
+    that pool WebSocket connections (Fish currently does not — see warm_tts
+    docstring for context). Tests still exercise the helper since it's
+    public; demos no longer call it."""
 
     def _stream(self) -> MagicMock:
         """Fake the async-iterable stream returned by tts.stream()."""
@@ -133,12 +141,15 @@ class TestWarmTts:
 
     @pytest.mark.asyncio
     async def test_calls_streaming_path(self) -> None:
+        """Default text was changed from "." to "hi" because Fish (and likely
+        other neural TTS) generates pathological amounts of silence audio
+        for a lone period — see warm_tts docstring."""
         stream = self._stream()
         tts = MagicMock()
         tts.stream = MagicMock(return_value=stream)
         await warm_tts(tts)
         tts.stream.assert_called_once_with()
-        stream.push_text.assert_called_once_with(".")
+        stream.push_text.assert_called_once_with("hi")
         stream.end_input.assert_called_once_with()
         stream.aclose.assert_awaited_once()
 
@@ -147,8 +158,8 @@ class TestWarmTts:
         stream = self._stream()
         tts = MagicMock()
         tts.stream = MagicMock(return_value=stream)
-        await warm_tts(tts, text="hi")
-        stream.push_text.assert_called_once_with("hi")
+        await warm_tts(tts, text="warming up")
+        stream.push_text.assert_called_once_with("warming up")
 
     @pytest.mark.asyncio
     async def test_swallows_provider_failure(self) -> None:

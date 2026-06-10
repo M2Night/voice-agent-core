@@ -35,7 +35,6 @@ from voice_agent_core import (
     load_env_walking_up,
     setup_observability,
     summarize_transcript,
-    warm_tts,
 )
 
 log = get_logger(__name__)
@@ -97,13 +96,15 @@ async def entry(ctx: JobContext) -> None:
     pipeline = build_pipeline(settings, vad=ctx.proc.userdata["vad"])
     session_start = time.monotonic()
 
-    # Prewarm the TTS WebSocket pool in parallel with session.start +
-    # ctx.connect so the first audio chunk of the greeting lands on a hot
-    # connection. Fire-and-forget; failures are logged and swallowed.
-    asyncio.create_task(warm_tts(pipeline.tts))
+    # NB: voice_agent_core also exports `warm_tts(pipeline.tts)` for prewarming
+    # the TTS WebSocket pool, but it currently provides no benefit with Fish
+    # (the livekit-plugins-fishaudio client doesn't pool connections — every
+    # synth opens a new socket). It also burns Fish billing on a junk synth.
+    # See warm_tts docstring; the helper is kept for future providers.
 
-    # build_session bakes in preemptive_generation=True and wraps
-    # turn_detection in TurnHandlingOptions. Override any of those via kwargs.
+    # build_session wraps turn_detection AND preemptive_generation (enabled
+    # by default) inside TurnHandlingOptions — the v1.5+ API. Override any
+    # of these via kwargs.
     session = build_session(pipeline)
 
     async def notify_session_ended(close_event) -> None:

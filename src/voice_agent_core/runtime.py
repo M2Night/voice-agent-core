@@ -12,7 +12,6 @@ Typical demo entrypoint::
         default_prewarm,
         default_room_options,
         is_warmup_session,
-        warm_tts,
     )
 
     server.setup_fnc = default_prewarm
@@ -22,7 +21,6 @@ Typical demo entrypoint::
         if is_warmup_session(ctx):
             return
         pipeline = build_pipeline(settings, vad=ctx.proc.userdata["vad"])
-        asyncio.create_task(warm_tts(pipeline.tts))
         session = build_session(pipeline)
         await session.start(
             agent=MyAgent(),
@@ -31,6 +29,10 @@ Typical demo entrypoint::
         )
         await ctx.connect()
         await session.say("Greeting…")
+
+Note: ``warm_tts`` is exported but currently not recommended with Fish
+Audio — see its docstring. The connection-pool prewarm pattern is only
+beneficial with TTS providers whose plugins pool WebSocket connections.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from livekit.agents import (
     room_io,
 )
 from livekit.agents import tts as agents_tts
+from livekit.agents.voice.turn import PreemptiveGenerationOptions
 from livekit.plugins import ai_coustics, silero
 
 from voice_agent_core.observability import get_logger
@@ -105,43 +108,67 @@ def build_session(
     Defaults applied:
 
     - STT / TTS / LLM / VAD wired from the pipeline
-    - ``turn_handling`` wraps ``pipeline.turn_detection`` in
-      ``TurnHandlingOptions``
+    - ``turn_handling`` wraps ``pipeline.turn_detection`` and
+      ``preemptive_generation`` inside a single ``TurnHandlingOptions`` —
+      this is the v1.5+ API; passing ``preemptive_generation`` directly to
+      ``AgentSession`` was deprecated and removed in v2.0.
     - ``preemptive_generation=True`` so the LLM starts generating before
       end-of-turn is fully confirmed (lower first-token latency at the cost
       of occasional discarded responses)
 
     Any extra kwargs in ``overrides`` flow straight to ``AgentSession`` and
-    take precedence — pass e.g. ``preemptive_generation=False`` to disable.
+    take precedence — e.g. pass your own ``turn_handling=...`` to override
+    the wrapper entirely.
     """
     return AgentSession(
         stt=pipeline.stt,
         tts=pipeline.tts,
         llm=pipeline.llm,
         vad=pipeline.vad,
-        turn_handling=TurnHandlingOptions(turn_detection=pipeline.turn_detection),
-        preemptive_generation=preemptive_generation,
+        turn_handling=TurnHandlingOptions(
+            turn_detection=pipeline.turn_detection,
+            preemptive_generation=PreemptiveGenerationOptions(
+                enabled=preemptive_generation,
+            ),
+        ),
         **overrides,
     )
 
 
-async def warm_tts(tts: agents_tts.TTS, *, text: str = ".") -> None:
-    """Drive a tiny streaming synth round-trip to open the TTS WebSocket pool.
+async def warm_tts(tts: agents_tts.TTS, *, text: str = "hi") -> None:
+    """Drive a tiny streaming synth round-trip to open a TTS WebSocket.
 
-    Fire as ``asyncio.create_task(warm_tts(pipeline.tts))`` in parallel with
-    ``session.start`` + ``ctx.connect``. By the time the real opener fires
-    (typically a few hundred ms later) the connection is hot — the first
-    audio chunk arrives faster, giving WebRTC's adaptive jitter buffer more
-    data before playback starts and reducing the first-word stutter.
+    **Currently NOT recommended for use with Fish Audio via
+    livekit-plugins-fishaudio.** Empirical measurement (see voice-agent-core
+    issue tracker / commit history) showed that:
 
-    Important: this must use the streaming path (``tts.stream()``), not
-    ``synthesize()``. ``session.say`` and ``session.generate_reply`` go
-    through the streaming WebSocket, which is a different connection pool
-    from ``synthesize()``'s HTTP POST — warming the wrong path is wasted.
+    1. The Fish plugin does not pool WebSocket connections — every
+       ``tts.stream()`` opens a fresh socket, so the warmup connection is
+       closed before the real ``session.say`` synth can reuse it.
+       Connection-reused metrics in production logs were always ``false``.
+    2. Single-character inputs like ``"."`` confused Fish's TTS into
+       generating multi-second blobs of "silence audio" (one production
+       sample produced 35 seconds of audio for a single ``.``), which
+       wastes Fish billing and occasionally triggered an
+       ``Inference backend returned empty audio`` error.
 
-    Best-effort: failures are logged and swallowed. The real synth will
-    surface any actual provider error to the user via its normal failure
-    path.
+    The helper is kept in voice-agent-core because the *pattern* is sound —
+    it will pay off when:
+
+    - A TTS provider whose plugin actually pools WebSocket connections is
+      added (e.g. ElevenLabs, OpenAI TTS)
+    - The Fish plugin gains connection pooling upstream
+    - We swap to a provider-agnostic abstraction
+
+    Until one of those happens, demos should NOT call this. Default ``text``
+    was changed from ``"."`` to ``"hi"`` so any future invocation hits a
+    well-defined synth path rather than the empty-audio degenerate case.
+
+    Implementation notes (when re-enabled): uses the streaming path
+    (``tts.stream()``), not ``synthesize()`` — the latter goes through a
+    separate HTTP POST endpoint that wouldn't share state with
+    ``session.say``'s streaming WebSocket even with a pooling provider.
+    Best-effort: failures are logged and swallowed.
     """
     try:
         stream = tts.stream()
