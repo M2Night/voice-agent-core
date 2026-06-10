@@ -57,7 +57,7 @@ A successful run proves:
 
 ## Slack notification on session end
 
-The smoke agent registers a shutdown callback via `ctx.add_shutdown_callback`. When a session ends (participant disconnects, room closes, etc.), one Slack notification fires per session — concurrent users yield independent notifications because each session runs in its own subprocess.
+The smoke agent registers a close handler via `session.on("close")`. When a session ends (participant disconnects, room closes, etc.), one Slack notification fires per session — concurrent users yield independent notifications because each session runs in its own subprocess. (We hook the session close rather than `ctx.add_shutdown_callback` because the latter only fires on full job shutdown — by then the subprocess may exit forcefully before the notification completes.)
 
 To enable real Slack delivery, set `SLACK_WEBHOOK_URL` in `examples/.env` to your incoming-webhook URL. Without it, the notifier falls back to **dev mode** — it logs the payload to stdout (event `notify.dev_mode`) instead of making an HTTP call, so you can still see what *would* have been sent.
 

@@ -1,8 +1,8 @@
 """Smoke agent — minimum runnable agent built on voice-agent-core.
 
-No business logic; just demonstrates wiring: settings → pipeline → AgentSession.
-Use it to verify voice-agent-core works end-to-end in your environment, and as
-a reference template for building your own agents.
+No business logic; just demonstrates the canonical wiring with the v0.2.x
+runtime helpers. Use it to verify voice-agent-core works end-to-end in your
+environment, and as a reference template for building your own agents.
 
 Run::
 
@@ -18,16 +18,7 @@ import asyncio
 import time
 from pathlib import Path
 
-from livekit.agents import (
-    Agent,
-    AgentServer,
-    AgentSession,
-    JobContext,
-    JobProcess,
-    TurnHandlingOptions,
-    cli,
-)
-from livekit.plugins import silero
+from livekit.agents import Agent, AgentServer, JobContext, cli
 
 from voice_agent_core import (
     BaseAgentSettings,
@@ -35,11 +26,16 @@ from voice_agent_core import (
     NotificationPayload,
     SlackNotifier,
     build_pipeline,
+    build_session,
+    default_prewarm,
+    default_room_options,
     format_transcript,
     get_logger,
+    is_warmup_session,
     load_env_walking_up,
     setup_observability,
     summarize_transcript,
+    warm_tts,
 )
 
 log = get_logger(__name__)
@@ -68,14 +64,10 @@ server = AgentServer()
 # the worker). Stateless: sharing initial config across forks is safe.
 # Empty webhook_url triggers SlackNotifier's dev-log mode (no HTTP call).
 notifier = SlackNotifier(webhook_url=settings.slack_webhook_url)
-
-
-def prewarm(proc: JobProcess) -> None:
-    """Load silero VAD once per process; reused across all sessions."""
-    proc.userdata["vad"] = silero.VAD.load()
-
-
-server.setup_fnc = prewarm
+# default_prewarm loads silero VAD into proc.userdata["vad"]. Demos that need
+# extra prewarm work should wrap this: call default_prewarm(proc) first, then
+# stash whatever else on proc.userdata.
+server.setup_fnc = default_prewarm
 
 
 class SmokeAgent(Agent):
@@ -94,16 +86,25 @@ class SmokeAgent(Agent):
 
 @server.rtc_session(agent_name="smoke")
 async def entry(ctx: JobContext) -> None:
+    # Short-circuit page-load warmup dispatches (room names "warmup-*").
+    # Frontends fire these to wake a cold worker before the user clicks Talk;
+    # see voice-agent-core README's worker-warmup pattern. Returning here
+    # leaves the worker hot but skips the rest of the pipeline + side effects.
+    if is_warmup_session(ctx):
+        log.info("session.warmup", room=ctx.room.name)
+        return
+
     pipeline = build_pipeline(settings, vad=ctx.proc.userdata["vad"])
     session_start = time.monotonic()
 
-    session = AgentSession(
-        stt=pipeline.stt,
-        tts=pipeline.tts,
-        llm=pipeline.llm,
-        vad=pipeline.vad,
-        turn_handling=TurnHandlingOptions(turn_detection=pipeline.turn_detection),
-    )
+    # Prewarm the TTS WebSocket pool in parallel with session.start +
+    # ctx.connect so the first audio chunk of the greeting lands on a hot
+    # connection. Fire-and-forget; failures are logged and swallowed.
+    asyncio.create_task(warm_tts(pipeline.tts))
+
+    # build_session bakes in preemptive_generation=True and wraps
+    # turn_detection in TurnHandlingOptions. Override any of those via kwargs.
+    session = build_session(pipeline)
 
     async def notify_session_ended(close_event) -> None:
         """Fires when AgentSession closes (participant disconnect, error, etc.).
@@ -153,8 +154,20 @@ async def entry(ctx: JobContext) -> None:
         lambda close_event: asyncio.create_task(notify_session_ended(close_event)),
     )
 
-    await session.start(agent=SmokeAgent(), room=ctx.room)
+    # default_room_options() returns RoomOptions with AI Coustics QUAIL_VF_S
+    # mic-side noise cancellation. For demos that need different audio config,
+    # construct RoomOptions inline instead.
+    await session.start(
+        agent=SmokeAgent(),
+        room=ctx.room,
+        room_options=default_room_options(),
+    )
     await ctx.connect()
+
+    # generate_reply has the LLM ideate the greeting. For lower latency,
+    # demos often prefer a canned line via session.say(...) instead — that
+    # skips the LLM round-trip on the first turn at the cost of a fixed
+    # opener. Smoke uses generate_reply to exercise the full pipeline.
     await session.generate_reply(
         instructions="Greet the user warmly and ask what's on their mind."
     )
