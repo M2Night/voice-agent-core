@@ -79,7 +79,7 @@ class TestBaseAgentSettings:
         s = BaseAgentSettings()
         assert s.llm_backend == "livekit"
         assert s.llm_model == "openai/gpt-5.2-chat-latest"
-        assert s.fish_tts_model == "s2.1-pro"
+        assert s.fish_tts_model == "s2-pro"
         assert s.fish_tts_latency_mode == "balanced"
         assert s.log_level == "INFO"
         assert s.log_format == "json"

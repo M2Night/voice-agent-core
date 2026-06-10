@@ -60,7 +60,13 @@ class BaseAgentSettings(BaseSettings):
     # --- Fish Audio ---
     fish_api_key: str = Field(default="", description="Fish Audio API key")
     fish_voice_id: str = Field(default="", description="Fish Audio voice ID for TTS")
-    fish_tts_model: str = Field(default="s2.1-pro", description="Fish TTS model name")
+    fish_tts_model: str = Field(
+        default="s2-pro",
+        description=(
+            "Fish TTS model. 's2-pro' (default) is clean in LiveKit 1.5.x; "
+            "'s2.1-pro' produces audible static — listening-test before switching."
+        ),
+    )
     fish_tts_latency_mode: TTSLatencyMode = Field(
         default="balanced",
         description="Fish TTS latency/quality tradeoff",

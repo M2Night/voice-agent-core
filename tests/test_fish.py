@@ -24,7 +24,7 @@ class TestBuildFishTTS:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
         s = BaseAgentSettings()
         tts = build_fish_tts(s)
-        assert tts.model == "s2.1-pro"
+        assert tts.model == "s2-pro"
         assert tts.latency_mode == "balanced"
 
     def test_voice_id_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
