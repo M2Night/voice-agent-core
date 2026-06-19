@@ -1174,6 +1174,9 @@ codecs = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
+deepgram = [
+    { name = "livekit-plugins-deepgram" },
+]
 fishaudio = [
     { name = "livekit-plugins-fishaudio" },
 ]
@@ -1261,6 +1264,20 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-deepgram"
+version = "1.5.17"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents", extra = ["codecs"] },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/a3/de74a74a9befb92e940693712d2d23b26d10b222d090cff69d682ff501f8/livekit_plugins_deepgram-1.5.17.tar.gz", hash = "sha256:678f5efb05fe0f3047c5cda2ab0f30aa0ece50a963450b578566a96691b2989a", size = 18334, upload-time = "2026-06-03T01:37:02.517Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/ec/06c5af45c8fdc8fb60988d6946717b430c1460239c6083ca6fe9fbe6179e/livekit_plugins_deepgram-1.5.17-py3-none-any.whl", hash = "sha256:c0226d38a2f7e8adbb8165c4ef1fc737ed5fed7415470b43c8f561a9fc339c3d", size = 23061, upload-time = "2026-06-03T01:37:01.431Z" },
+]
+
+[[package]]
 name = "livekit-plugins-fishaudio"
 version = "1.5.17"
 source = { registry = "https://pypi.org/simple" }
@@ -1271,6 +1288,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/09/32/01a7c3f8767a6ae80f988291ccf9ec8d1babb2ce11103d2e4d63d65111a1/livekit_plugins_fishaudio-1.5.17.tar.gz", hash = "sha256:ef792893b3f1130033a9454c5eb3d9a56968e198d92d37eab2cd1e4850732115", size = 7790, upload-time = "2026-06-03T01:37:18.218Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/21/92/a03589456e5c5ef7232955f2bc7e0972c86307ff7d36d4b2465746c45147/livekit_plugins_fishaudio-1.5.17-py3-none-any.whl", hash = "sha256:8af1a2a146643aa1f9fe456ed7ce6d202ce52cd20d7ad6619d3e89e1a98b86e0", size = 7893, upload-time = "2026-06-03T01:37:16.933Z" },
+]
+
+[[package]]
+name = "livekit-plugins-noise-cancellation"
+version = "0.2.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/36/2a/2782bc35b0fee188d362a4628f1c0595a61fe76d56c527bc5de4df8fddfc/livekit_plugins_noise_cancellation-0.2.5-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:b327424a70a4d4f2ce9a52144fa62f68372b644951a738b12c104cb4f2a15b6b", size = 66066815, upload-time = "2025-06-30T14:49:39.833Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/75/3758aeba5964b826482786c044866e353823d6d5ff1736106584ae7d3b06/livekit_plugins_noise_cancellation-0.2.5-py3-none-macosx_11_0_arm64.whl", hash = "sha256:584211137dc732ac882fb11a40c35888250c74a8806e46a21ce1fd57a05c1c1e", size = 64608005, upload-time = "2025-06-30T14:49:44.471Z" },
+    { url = "https://files.pythonhosted.org/packages/90/2e/cf86f21b338c6571b95e18bd9d96b33d64bf2fb1123f796cc7033bda821d/livekit_plugins_noise_cancellation-0.2.5-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:47050db446693e1a260339f5c45b025cd2b6030516a80e976d90ebaa4eef687c", size = 70218295, upload-time = "2025-06-30T14:49:49.304Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/b8/2f7a56b1c15220988fb4ac3e73483cf611a7547ab16b867b25d373eddbc7/livekit_plugins_noise_cancellation-0.2.5-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:535e510d92e0a36e33f60c2ddd4de0da3cbfd21fe02d767f5839b421b5bea9fb", size = 73324763, upload-time = "2025-06-30T14:49:54.032Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/4d/37be8da861607f392d07bb0f1c6b57c635db249095084abcbfaaaab6d7b5/livekit_plugins_noise_cancellation-0.2.5-py3-none-win_amd64.whl", hash = "sha256:5879d28120a6b47a7d557832d9432683710987f79e9b514171898be36534380b", size = 65757107, upload-time = "2025-06-30T14:49:59.053Z" },
 ]
 
 [[package]]
@@ -3057,8 +3089,9 @@ version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "livekit-agents", extra = ["fishaudio", "openai", "silero", "turn-detector"] },
+    { name = "livekit-agents", extra = ["deepgram", "fishaudio", "openai", "silero", "turn-detector"] },
     { name = "livekit-plugins-ai-coustics" },
+    { name = "livekit-plugins-noise-cancellation" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
     { name = "pydantic" },
@@ -3079,8 +3112,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
-    { name = "livekit-agents", extras = ["fishaudio", "openai", "silero", "turn-detector"], specifier = "~=1.5" },
+    { name = "livekit-agents", extras = ["deepgram", "fishaudio", "openai", "silero", "turn-detector"], specifier = "~=1.5" },
     { name = "livekit-plugins-ai-coustics", specifier = "~=0.2" },
+    { name = "livekit-plugins-noise-cancellation", specifier = "~=0.2" },
     { name = "opentelemetry-api", specifier = ">=1.25" },
     { name = "opentelemetry-sdk", specifier = ">=1.25" },
     { name = "pydantic", specifier = ">=2.6" },

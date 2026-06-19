@@ -48,7 +48,7 @@ from livekit.agents import (
 )
 from livekit.agents import tts as agents_tts
 from livekit.agents.voice.turn import PreemptiveGenerationOptions
-from livekit.plugins import ai_coustics, silero
+from livekit.plugins import noise_cancellation, silero
 
 from voice_agent_core.observability import get_logger
 from voice_agent_core.pipeline import PipelineComponents
@@ -82,17 +82,29 @@ def is_warmup_session(ctx: JobContext) -> bool:
 
 
 def default_room_options() -> room_io.RoomOptions:
-    """LiveKit ``RoomOptions`` with AI Coustics mic-side audio enhancement.
+    """LiveKit ``RoomOptions`` with LiveKit's BVC server-side noise cancellation.
 
-    QUAIL_VF_S runs noise cancellation + echo cancellation + dereverberation
-    on the visitor's mic feed. Cleaner input → better STT → more accurate
-    turn detection → fewer overlapping audio frames in playback.
+    Switched 2026-06 from AI Coustics ``QUAIL_VF_S`` (client-side ONNX
+    inference running in the agent container) to LiveKit's ``BVC()``
+    (Background Voice Cancellation) which runs on the LiveKit SFU
+    server-side. Two wins:
+
+    1. **CPU freed up in the agent container.** AI Coustics QUAIL_VF_S
+       was burning 10-30% CPU per session, which on a 2-core cloud
+       worker was crowding silero VAD inference — we observed
+       "inference is slower than realtime" warnings with delays up to
+       4.5 seconds. BVC runs on the SFU, so the agent gets that CPU
+       back for VAD + STT + LLM serialization.
+    2. **Tighter integration with LiveKit's audio pipeline.** BVC is
+       LiveKit's own model tuned for their codec/jitter behavior; less
+       chance of artifact interaction with the rest of the path.
+
+    The AI Coustics plugin is still a transitive dep (kept in
+    pyproject for now in case a demo needs the client-side option).
     """
     return room_io.RoomOptions(
         audio_input=room_io.AudioInputOptions(
-            noise_cancellation=ai_coustics.audio_enhancement(
-                model=ai_coustics.EnhancerModel.QUAIL_VF_S,
-            ),
+            noise_cancellation=noise_cancellation.BVC(),
         ),
     )
 
@@ -119,20 +131,30 @@ def build_session(
     Any extra kwargs in ``overrides`` flow straight to ``AgentSession`` and
     take precedence — e.g. pass your own ``turn_handling=...`` to override
     the wrapper entirely.
+
+    ``min_endpointing_delay`` defaults to ``0`` (vs LiveKit's 0.5s default).
+    When the pipeline uses a transformer turn detector (the default in
+    ``build_pipeline``), the model already has strong semantic signal for
+    end-of-turn; the extra 0.5s buffer is redundant insurance. Removing it
+    shaves 200-500ms off every user-turn round-trip. If a demo needs
+    different behavior — e.g. VAD-only turn detection where the buffer is
+    load-bearing — pass ``min_endpointing_delay=0.5`` via overrides.
     """
-    return AgentSession(
-        stt=pipeline.stt,
-        tts=pipeline.tts,
-        llm=pipeline.llm,
-        vad=pipeline.vad,
-        turn_handling=TurnHandlingOptions(
+    kwargs: dict[str, Any] = {
+        "stt": pipeline.stt,
+        "tts": pipeline.tts,
+        "llm": pipeline.llm,
+        "vad": pipeline.vad,
+        "turn_handling": TurnHandlingOptions(
             turn_detection=pipeline.turn_detection,
             preemptive_generation=PreemptiveGenerationOptions(
                 enabled=preemptive_generation,
             ),
         ),
-        **overrides,
-    )
+        "min_endpointing_delay": 0,
+    }
+    kwargs.update(overrides)
+    return AgentSession(**kwargs)
 
 
 async def warm_tts(tts: agents_tts.TTS, *, text: str = "hi") -> None:
