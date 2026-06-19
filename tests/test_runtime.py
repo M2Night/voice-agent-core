@@ -121,6 +121,31 @@ class TestBuildSession:
             build_session(pipeline, allow_interruptions=False)
         assert agent_session_cls.call_args.kwargs["allow_interruptions"] is False
 
+    def test_multilingual_marker_resolved_in_context(self) -> None:
+        # "multilingual" marker → MultilingualModel() constructed here (build_session
+        # runs in a job context); transformer mode keeps min_endpointing_delay=0.
+        pipeline = self._fake_pipeline()
+        pipeline.turn_detection = "multilingual"
+        fake_model = object()
+        with patch(
+            "livekit.plugins.turn_detector.multilingual.MultilingualModel",
+            return_value=fake_model,
+        ), patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"]["turn_detection"] is fake_model
+        assert kwargs["min_endpointing_delay"] == 0
+
+    def test_vad_marker_passthrough_with_buffer(self) -> None:
+        # "vad" passes straight through; VAD-only needs the 0.5s silence buffer.
+        pipeline = self._fake_pipeline()
+        pipeline.turn_detection = "vad"
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"]["turn_detection"] == "vad"
+        assert kwargs["min_endpointing_delay"] == 0.5
+
 
 class TestWarmTts:
     """warm_tts is kept in the public API for future use with TTS providers

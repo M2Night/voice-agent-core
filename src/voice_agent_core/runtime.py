@@ -132,26 +132,39 @@ def build_session(
     take precedence — e.g. pass your own ``turn_handling=...`` to override
     the wrapper entirely.
 
-    ``min_endpointing_delay`` defaults to ``0`` (vs LiveKit's 0.5s default).
-    When the pipeline uses a transformer turn detector (the default in
-    ``build_pipeline``), the model already has strong semantic signal for
-    end-of-turn; the extra 0.5s buffer is redundant insurance. Removing it
-    shaves 200-500ms off every user-turn round-trip. If a demo needs
-    different behavior — e.g. VAD-only turn detection where the buffer is
-    load-bearing — pass ``min_endpointing_delay=0.5`` via overrides.
+    Turn detection: ``pipeline.turn_detection`` is a mode marker. The
+    ``"multilingual"`` transformer model is constructed *here* (inside the session
+    entrypoint = a valid job context), which is why ``build_pipeline`` itself stays
+    context-free. ``"vad"`` / ``"stt"`` pass straight through as LiveKit strings; an
+    injected detector instance is used as-is.
+
+    ``min_endpointing_delay`` is mode-aware: ``0`` for the transformer / STT detector
+    (it already has strong end-of-turn signal — saves 200-500ms/turn), but ``0.5`` for
+    VAD-only mode, where the silence buffer is load-bearing (delay 0 would clip users
+    mid-pause). Override either via ``overrides``.
     """
+    td = pipeline.turn_detection
+    if td == "multilingual":
+        # Lazy + in-context: MultilingualModel() needs a running LiveKit job context,
+        # which exists here (session entrypoint) but not in build_pipeline.
+        from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+        td = MultilingualModel()
+
+    default_min_endpointing = 0.5 if pipeline.turn_detection == "vad" else 0
+
     kwargs: dict[str, Any] = {
         "stt": pipeline.stt,
         "tts": pipeline.tts,
         "llm": pipeline.llm,
         "vad": pipeline.vad,
         "turn_handling": TurnHandlingOptions(
-            turn_detection=pipeline.turn_detection,
+            turn_detection=td,
             preemptive_generation=PreemptiveGenerationOptions(
                 enabled=preemptive_generation,
             ),
         ),
-        "min_endpointing_delay": 0,
+        "min_endpointing_delay": default_min_endpointing,
     }
     kwargs.update(overrides)
     return AgentSession(**kwargs)

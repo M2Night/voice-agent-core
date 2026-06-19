@@ -39,6 +39,21 @@ class TestBuildPipeline:
         assert pipeline.vad is fake_vad
         assert pipeline.turn_detection is fake_td
 
+    def test_default_turn_detection_is_mode_marker_no_job_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No turn_detection injected → carries the mode marker string, NOT a
+        # constructed MultilingualModel. Proves build_pipeline needs no job context.
+        _set_required_env(monkeypatch)
+        pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+        assert pipeline.turn_detection == "multilingual"
+
+    def test_turn_detection_mode_vad(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _set_required_env(monkeypatch)
+        monkeypatch.setenv("TURN_DETECTION_MODE", "vad")
+        pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+        assert pipeline.turn_detection == "vad"
+
     def test_propagates_fish_key_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

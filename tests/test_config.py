@@ -74,7 +74,7 @@ class TestBaseAgentSettings:
         # Clear any leaked env vars
         for key in list(os.environ):
             if key.upper().startswith(
-                ("LIVEKIT_", "FISH_", "STT_", "TTS_", "LLM_", "OPENROUTER_", "OTEL_", "LOG_")
+                ("LIVEKIT_", "FISH_", "STT_", "TTS_", "LLM_", "OPENROUTER_", "OTEL_", "LOG_", "TURN_")
             ):
                 monkeypatch.delenv(key, raising=False)
 
@@ -84,6 +84,7 @@ class TestBaseAgentSettings:
         assert s.llm_provider == "openrouter"
         assert s.llm_model == "anthropic/claude-sonnet-4-6"
         assert s.tts_model == "s2-pro"
+        assert s.turn_detection_mode == "multilingual"
         assert s.tts_latency_mode == "balanced"
         assert s.log_level == "INFO"
         assert s.log_format == "json"

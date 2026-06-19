@@ -1,38 +1,24 @@
 """Pipeline factory: assemble a complete LiveKit voice agent pipeline from settings.
 
 ``build_pipeline(settings)`` returns a :class:`PipelineComponents` bundle with all
-the moving parts an ``AgentSession`` needs: STT, TTS, LLM, VAD, turn detection.
+the moving parts an ``AgentSession`` needs: STT, TTS, LLM, VAD, and a turn-detection
+selection.
 
-Usage::
+Turn detection is carried as a *mode marker*, not a constructed object: the value is
+either a string (``"multilingual"`` / ``"vad"`` / ``"stt"``, from
+``settings.turn_detection_mode``) or a turn-detector instance you inject. The
+``"multilingual"`` transformer model needs a LiveKit job context, so it is resolved
+lazily in :func:`voice_agent_core.runtime.build_session` (which runs inside the
+session entrypoint) — **not** here. This keeps ``build_pipeline`` callable anywhere
+(tests, tooling), with no job context required.
 
-    pipeline = build_pipeline(settings)
-    session = AgentSession(
-        stt=pipeline.stt,
-        tts=pipeline.tts,
-        llm=pipeline.llm,
-        vad=pipeline.vad,
-        turn_handling=TurnHandlingOptions(turn_detection=pipeline.turn_detection),
-    )
-
-``vad`` and ``turn_detection`` are accepted as optional kwargs:
-
-- VAD: silero loads a PyTorch model — slow on first call. For production, prewarm
-  in ``JobProcess.prewarm`` and pass it in.
-- MultilingualModel: its constructor requires a LiveKit job context, so it can
-  only be created inside a ``@server.rtc_session`` entrypoint. If you call
-  ``build_pipeline`` from outside such a context (e.g. unit tests), pass a
-  sentinel via ``turn_detection=...`` to skip the default construction.
-
-Production usage (everything default, called inside the session entrypoint)::
-
-    pipeline = build_pipeline(settings)
-
-Production with prewarmed VAD::
-
-    def prewarm(proc: JobProcess):
-        proc.userdata["vad"] = silero.VAD.load()
+Usage (inside the session entrypoint)::
 
     pipeline = build_pipeline(settings, vad=ctx.proc.userdata["vad"])
+    session = build_session(pipeline)  # resolves the turn detector in-context
+
+VAD note: silero loads a PyTorch model — slow on first call. For production, prewarm
+in ``JobProcess.prewarm`` and pass it in via ``vad=``.
 """
 
 from __future__ import annotations
@@ -44,12 +30,13 @@ from livekit.agents import llm as agents_llm
 from livekit.agents import stt as agents_stt
 from livekit.agents import tts as agents_tts
 from livekit.plugins import silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from voice_agent_core.observability import get_logger
 from voice_agent_core.providers import build_llm, build_stt, build_tts
 
 if TYPE_CHECKING:
+    from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
     from voice_agent_core.config import BaseAgentSettings
 
 log = get_logger(__name__)
@@ -59,34 +46,36 @@ log = get_logger(__name__)
 class PipelineComponents:
     """All the pieces an ``AgentSession`` needs, in one bundle.
 
-    Apps construct this via :func:`build_pipeline` and unpack the fields into
-    their ``AgentSession(...)`` call site.
+    Apps construct this via :func:`build_pipeline` and hand it to
+    :func:`voice_agent_core.runtime.build_session`.
     """
 
     stt: agents_stt.STT
     tts: agents_tts.TTS
     llm: agents_llm.LLM
     vad: silero.VAD
-    turn_detection: MultilingualModel
+    turn_detection: str | MultilingualModel
 
 
 def build_pipeline(
     settings: BaseAgentSettings,
     *,
     vad: silero.VAD | None = None,
-    turn_detection: MultilingualModel | None = None,
+    turn_detection: str | MultilingualModel | None = None,
 ) -> PipelineComponents:
-    """Assemble a complete LiveKit voice pipeline from settings.
+    """Assemble a LiveKit voice pipeline from settings.
 
-    Both ``vad`` and ``turn_detection`` are constructed eagerly if not provided.
-    See module docstring for production prewarm patterns and the LiveKit job
-    context requirement on ``MultilingualModel``.
+    No job context required: ``turn_detection`` defaults to the mode marker from
+    ``settings.turn_detection_mode`` and the (context-bound) transformer model is
+    constructed later in ``build_session``. Pass ``vad=`` a prewarmed instance in
+    production; pass ``turn_detection=`` to inject your own detector.
     """
     log.info(
         "pipeline.build_start",
         stt_provider=settings.stt_provider,
         tts_provider=settings.tts_provider,
         llm_provider=settings.llm_provider,
+        turn_detection_mode=settings.turn_detection_mode,
     )
 
     pipeline = PipelineComponents(
@@ -94,7 +83,9 @@ def build_pipeline(
         tts=build_tts(settings),
         llm=build_llm(settings),
         vad=vad if vad is not None else silero.VAD.load(),
-        turn_detection=turn_detection if turn_detection is not None else MultilingualModel(),
+        turn_detection=(
+            turn_detection if turn_detection is not None else settings.turn_detection_mode
+        ),
     )
 
     log.info("pipeline.build_done")

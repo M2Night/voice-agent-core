@@ -28,6 +28,15 @@ TTSLatencyMode = Literal["normal", "balanced", "low"]
 - ``normal``: standard latency, highest quality
 """
 OTelExporter = Literal["console", "none"]
+TurnDetectionMode = Literal["multilingual", "vad", "stt"]
+"""How to detect end-of-user-turn.
+
+- ``multilingual``: LiveKit's semantic transformer detector — best quality;
+  constructed inside the session (needs a job context), so it's resolved in
+  ``build_session``, not ``build_pipeline``.
+- ``vad``: silence-based via VAD — lightest, loads no extra model.
+- ``stt``: end-of-turn from the STT endpoint.
+"""
 
 
 class BaseAgentSettings(BaseSettings):
@@ -118,6 +127,15 @@ class BaseAgentSettings(BaseSettings):
         ),
     )
 
+    # --- Turn detection ---
+    turn_detection_mode: TurnDetectionMode = Field(
+        default="multilingual",
+        description=(
+            "Turn-detection strategy: 'multilingual' (semantic transformer, default), "
+            "'vad' (silence-based, lightest), or 'stt' (STT-endpoint based)."
+        ),
+    )
+
     # --- Observability ---
     log_level: LogLevel = Field(default="INFO", description="Root log level")
     log_format: LogFormat = Field(
@@ -183,6 +201,7 @@ __all__ = [
     "LogLevel",
     "OTelExporter",
     "TTSLatencyMode",
+    "TurnDetectionMode",
     "load_env_walking_up",
     "load_yaml",
 ]
