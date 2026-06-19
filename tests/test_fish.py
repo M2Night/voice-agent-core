@@ -29,7 +29,7 @@ class TestBuildFishTTS:
 
     def test_voice_id_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
-        monkeypatch.setenv("FISH_VOICE_ID", "voice-abc")
+        monkeypatch.setenv("TTS_VOICE_ID", "voice-abc")
         s = BaseAgentSettings()
         tts = build_fish_tts(s)
         assert tts.voice_id == "voice-abc"
@@ -53,14 +53,14 @@ class TestBuildFishSTT:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
-        monkeypatch.setenv("FISH_STT_LANGUAGE", "auto")
+        monkeypatch.setenv("STT_LANGUAGE", "auto")
         s = BaseAgentSettings()
         stt = build_fish_stt(s)
         assert stt._opts.language is None
 
     def test_explicit_language_kept(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
-        monkeypatch.setenv("FISH_STT_LANGUAGE", "en")
+        monkeypatch.setenv("STT_LANGUAGE", "en")
         s = BaseAgentSettings()
         stt = build_fish_stt(s)
         assert stt._opts.language == "en"

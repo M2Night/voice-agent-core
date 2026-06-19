@@ -6,6 +6,11 @@ Subclasses ``livekit.plugins.fishaudio.TTS`` and adds:
 - **Structured logging** — every synthesis logs via structlog with stable key names
 - **Stream-level instrumentation** — measures stream-open→first-text and
   stream-open→first-audio latencies in addition to the plugin-emitted TTFB
+- **Sentence-boundary buffering** — accumulates LLM-streamed tokens until a
+  punctuation mark, then pushes the complete clause to upstream Fish TTS.
+  Reduces "chunk boundary in the middle of a word" artifacts and produces
+  more natural prosody at the cost of a small latency penalty (waits for
+  the next punctuation before emitting).
 """
 
 from __future__ import annotations
@@ -124,11 +129,33 @@ class FishTTS(fishaudio.TTS):
         )
 
 
-class _InstrumentedStream:
-    """Wraps a SynthesizeStream to measure first-text and first-audio timings.
+_SENTENCE_PUNCT = frozenset({".", "。", ",", "，", "!", "！", "?", "？", ";", "；", ":", "：", "\n"})  # noqa: RUF001  (intentional full-width CJK punctuation)
+"""Characters that close a TTS-worthy clause.
 
-    Forwards all unknown attributes/methods to the wrapped stream via __getattr__,
-    so it stays a drop-in replacement even if the upstream interface grows.
+Includes both ASCII and CJK punctuation so the buffering works across
+mixed-language responses. The newline is here too — LLMs sometimes
+emit one between list items, and treating it as a clause boundary
+keeps Fish's prosody intact.
+"""
+
+
+class _InstrumentedStream:
+    """Wraps a SynthesizeStream to add metrics + sentence-boundary buffering.
+
+    Forwards all unknown attributes/methods to the wrapped stream via
+    ``__getattr__``, so it stays a drop-in replacement even if the
+    upstream interface grows.
+
+    Buffering behavior (the "buffer_sentences" pattern from hanabi):
+    ``push_text`` accumulates incoming LLM tokens in
+    ``_sentence_buffer`` and only forwards to the underlying Fish TTS
+    stream when the buffer contains a closed clause (text ending in
+    punctuation followed by non-punctuation). On ``end_input`` /
+    ``flush`` / ``aclose`` we drain any remaining buffer so trailing
+    text without a final period still gets spoken. The TTS receives
+    semantically complete clauses rather than arbitrary LLM token
+    boundaries — Fish can plan prosody better, and chunk boundaries no
+    longer fall mid-word.
     """
 
     def __init__(self, *, inner: tts.SynthesizeStream, owner: FishTTS) -> None:
@@ -138,6 +165,13 @@ class _InstrumentedStream:
         self._first_text_at: float | None = None
         self._first_audio_logged = False
         self._chars_buffered = 0
+        self._sentence_buffer = ""
+
+    def _flush_sentence_buffer(self) -> None:
+        """Push any remaining buffered text and reset the buffer."""
+        if self._sentence_buffer:
+            self._inner.push_text(self._sentence_buffer)
+            self._sentence_buffer = ""
 
     def push_text(self, token: str) -> None:
         if token and self._first_text_at is None:
@@ -150,15 +184,46 @@ class _InstrumentedStream:
             )
         if token and not self._first_audio_logged:
             self._chars_buffered += len(token)
-        self._inner.push_text(token)
+
+        # Sentence-boundary buffering: accumulate tokens until we see a
+        # punctuation mark followed by non-punctuation. We send the prefix
+        # (including the punctuation run) to Fish and keep the rest buffered.
+        # The "followed by non-punctuation" check handles patterns like "..."
+        # and "?!" where consecutive punctuation should stay in one chunk.
+        self._sentence_buffer += token
+        while True:
+            idx = -1
+            for i, ch in enumerate(self._sentence_buffer):
+                if ch in _SENTENCE_PUNCT:
+                    idx = i
+                    break
+            if idx == -1:
+                break
+            end = idx + 1
+            while end < len(self._sentence_buffer) and self._sentence_buffer[end] in _SENTENCE_PUNCT:
+                end += 1
+            if end == len(self._sentence_buffer):
+                # Punctuation runs to the end of the buffer — wait for the
+                # next token to see if more punctuation follows before we
+                # decide where to split.
+                break
+            part, self._sentence_buffer = (
+                self._sentence_buffer[:end],
+                self._sentence_buffer[end:],
+            )
+            self._inner.push_text(part)
 
     def flush(self) -> None:
+        self._flush_sentence_buffer()
         self._inner.flush()
 
     def end_input(self) -> None:
+        self._flush_sentence_buffer()
         self._inner.end_input()
 
     async def aclose(self) -> None:
+        # Drain any partial clause before closing so trailing text isn't lost.
+        self._flush_sentence_buffer()
         await self._inner.aclose()
 
     async def __aenter__(self) -> _InstrumentedStream:
@@ -205,19 +270,19 @@ class _InstrumentedStream:
 def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     """Construct an instrumented Fish TTS from a settings object.
 
-    Required env: ``FISH_API_KEY``. Optional: ``FISH_VOICE_ID``, ``FISH_TTS_MODEL``,
-    ``FISH_TTS_LATENCY_MODE``.
+    Required env: ``FISH_API_KEY``. Optional: ``TTS_VOICE_ID``, ``TTS_MODEL``,
+    ``TTS_LATENCY_MODE``.
     """
     if not settings.fish_api_key:
         raise ValueError("FISH_API_KEY is required to build Fish TTS")
 
     kwargs: dict[str, Any] = {
         "api_key": settings.fish_api_key,
-        "model": settings.fish_tts_model,
-        "latency_mode": settings.fish_tts_latency_mode,
+        "model": settings.tts_model,
+        "latency_mode": settings.tts_latency_mode,
     }
-    if settings.fish_voice_id:
-        kwargs["voice_id"] = settings.fish_voice_id
+    if settings.tts_voice_id:
+        kwargs["voice_id"] = settings.tts_voice_id
 
     return FishTTS(**kwargs)
 

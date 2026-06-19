@@ -1,17 +1,13 @@
-"""LLM factory: build the right LLM client from settings.
+"""LLM provider builders.
 
-Two backends, switched via ``settings.llm_backend`` (env: ``LLM_BACKEND``):
+Two concrete builders, registered into the provider registry (see ``providers.py``):
 
-- ``livekit`` — LiveKit Inference (free for LiveKit Cloud users; no extra API key needed)
-- ``openrouter`` — OpenRouter (50+ models; requires ``OPENROUTER_API_KEY``)
+- ``build_livekit_llm`` — LiveKit Inference (free for LiveKit Cloud users; no extra key)
+- ``build_openrouter_llm`` — OpenRouter (50+ models; requires ``OPENROUTER_API_KEY``)
 
-Usage::
-
-    from voice_agent_core import BaseAgentSettings, build_llm
-
-    settings = BaseAgentSettings()
-    llm = build_llm(settings)
-    session = AgentSession(llm=llm, ...)
+The public dispatcher ``build_llm(settings)`` lives in ``providers.py`` and selects the
+builder by ``settings.llm_provider``. Both builders read the model id from
+``settings.llm_model``.
 """
 
 from __future__ import annotations
@@ -30,43 +26,34 @@ log = get_logger(__name__)
 _OPENROUTER_APP_NAME = "voice-agent-core"
 
 
-def build_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
-    """Construct an LLM client from settings.
-
-    Dispatches on ``settings.llm_backend``. Raises ``ValueError`` if
-    ``llm_backend=openrouter`` but ``OPENROUTER_API_KEY`` is missing.
-    """
-    backend = settings.llm_backend
-
-    if backend == "livekit":
-        if not settings.livekit_api_key or not settings.livekit_api_secret:
-            raise ValueError(
-                "LIVEKIT_API_KEY and LIVEKIT_API_SECRET are both required when "
-                "llm_backend=livekit (LiveKit Inference authenticates against "
-                "your LiveKit Cloud project)"
-            )
-
-        from livekit.agents import inference
-
-        log.info("llm.build", backend="livekit", model=settings.llm_model)
-        return inference.LLM(model=settings.llm_model)
-
-    if backend == "openrouter":
-        if not settings.openrouter_api_key:
-            raise ValueError(
-                "OPENROUTER_API_KEY is required when llm_backend=openrouter"
-            )
-
-        from livekit.plugins import openai
-
-        log.info("llm.build", backend="openrouter", model=settings.openrouter_model)
-        return openai.LLM.with_openrouter(
-            model=settings.openrouter_model,
-            api_key=settings.openrouter_api_key,
-            app_name=_OPENROUTER_APP_NAME,
+def build_livekit_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
+    """Build a LiveKit Inference LLM. Requires LiveKit Cloud credentials."""
+    if not settings.livekit_api_key or not settings.livekit_api_secret:
+        raise ValueError(
+            "LIVEKIT_API_KEY and LIVEKIT_API_SECRET are both required when "
+            "llm_provider=livekit (LiveKit Inference authenticates against your "
+            "LiveKit Cloud project)"
         )
 
-    raise ValueError(f"Unknown llm_backend: {backend!r}")
+    from livekit.agents import inference
+
+    log.info("llm.build", provider="livekit", model=settings.llm_model)
+    return inference.LLM(model=settings.llm_model)
 
 
-__all__ = ["build_llm"]
+def build_openrouter_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
+    """Build an OpenRouter-backed LLM. Requires ``OPENROUTER_API_KEY``."""
+    if not settings.openrouter_api_key:
+        raise ValueError("OPENROUTER_API_KEY is required when llm_provider=openrouter")
+
+    from livekit.plugins import openai
+
+    log.info("llm.build", provider="openrouter", model=settings.llm_model)
+    return openai.LLM.with_openrouter(
+        model=settings.llm_model,
+        api_key=settings.openrouter_api_key,
+        app_name=_OPENROUTER_APP_NAME,
+    )
+
+
+__all__ = ["build_livekit_llm", "build_openrouter_llm"]

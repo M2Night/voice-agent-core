@@ -46,9 +46,8 @@ from livekit.agents import tts as agents_tts
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-from voice_agent_core.fish import build_fish_stt, build_fish_tts
-from voice_agent_core.llm import build_llm
 from voice_agent_core.observability import get_logger
+from voice_agent_core.providers import build_llm, build_stt, build_tts
 
 if TYPE_CHECKING:
     from voice_agent_core.config import BaseAgentSettings
@@ -83,11 +82,16 @@ def build_pipeline(
     See module docstring for production prewarm patterns and the LiveKit job
     context requirement on ``MultilingualModel``.
     """
-    log.info("pipeline.build_start", llm_backend=settings.llm_backend)
+    log.info(
+        "pipeline.build_start",
+        stt_provider=settings.stt_provider,
+        tts_provider=settings.tts_provider,
+        llm_provider=settings.llm_provider,
+    )
 
     pipeline = PipelineComponents(
-        stt=build_fish_stt(settings),
-        tts=build_fish_tts(settings),
+        stt=build_stt(settings),
+        tts=build_tts(settings),
         llm=build_llm(settings),
         vad=vad if vad is not None else silero.VAD.load(),
         turn_detection=turn_detection if turn_detection is not None else MultilingualModel(),

@@ -11,7 +11,6 @@ Two pieces:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -19,7 +18,6 @@ import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-LLMBackend = Literal["livekit", "openrouter"]
 LogFormat = Literal["json", "console"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 TTSLatencyMode = Literal["normal", "balanced", "low"]
@@ -57,41 +55,67 @@ class BaseAgentSettings(BaseSettings):
     livekit_api_key: str = Field(default="", description="LiveKit API key")
     livekit_api_secret: str = Field(default="", description="LiveKit API secret")
 
-    # --- Fish Audio ---
-    fish_api_key: str = Field(default="", description="Fish Audio API key")
-    fish_voice_id: str = Field(default="", description="Fish Audio voice ID for TTS")
-    fish_tts_model: str = Field(
-        default="s2-pro",
-        description=(
-            "Fish TTS model. 's2-pro' (default) is clean in LiveKit 1.5.x; "
-            "'s2.1-pro' produces audible static — listening-test before switching."
-        ),
-    )
-    fish_tts_latency_mode: TTSLatencyMode = Field(
-        default="balanced",
-        description="Fish TTS latency/quality tradeoff",
-    )
-    fish_stt_language: str = Field(
-        default="auto",
-        description="Fish STT language ('auto' for auto-detect)",
-    )
-
-    # --- LLM ---
-    llm_backend: LLMBackend = Field(
-        default="livekit",
-        description="Which LLM backend factory to use",
-    )
-    llm_model: str = Field(
-        default="openai/gpt-5.2-chat-latest",
-        description="LLM model identifier (LiveKit Inference notation)",
-    )
+    # --- Provider credentials (secrets) ---
+    # Kept separate from provider/model selection: secrets live here, the
+    # "which provider / which model" knobs live in the per-layer sections below.
+    fish_api_key: str = Field(default="", description="Fish Audio API key (STT + TTS)")
     openrouter_api_key: str = Field(
         default="",
-        description="OpenRouter API key (only used when llm_backend=openrouter)",
+        description="OpenRouter API key (used when llm_provider=openrouter, the default)",
     )
-    openrouter_model: str = Field(
+    deepgram_api_key: str = Field(
+        default="",
+        description="Deepgram API key (only used when stt_provider=deepgram)",
+    )
+
+    # --- STT (provider → model) ---
+    stt_provider: str = Field(
+        default="fish",
+        description="STT provider name; must be registered in providers.py (default 'fish')",
+    )
+    stt_model: str = Field(
+        default="",
+        description="STT model id for the chosen provider ('' = provider default; Fish ASR has one model)",
+    )
+    stt_language: str = Field(
+        default="auto",
+        description="STT language ('auto' for auto-detect)",
+    )
+
+    # --- TTS (provider → model → voice) ---
+    tts_provider: str = Field(
+        default="fish",
+        description="TTS provider name; must be registered in providers.py (default 'fish')",
+    )
+    tts_model: str = Field(
+        default="s2-pro",
+        description=(
+            "TTS model id for the chosen provider. For Fish: 's2-pro' (default) is "
+            "clean in LiveKit 1.5.x; 's2.1-pro' produces audible static — listen-test "
+            "before switching."
+        ),
+    )
+    tts_voice_id: str = Field(
+        default="",
+        description="TTS voice id ('' = provider default voice)",
+    )
+    tts_latency_mode: TTSLatencyMode = Field(
+        default="balanced",
+        description="TTS latency/quality tradeoff (Fish: low | balanced | normal)",
+    )
+
+    # --- LLM (provider → model) ---
+    llm_provider: str = Field(
+        default="openrouter",
+        description="LLM provider name; must be registered in providers.py (default 'openrouter')",
+    )
+    llm_model: str = Field(
         default="anthropic/claude-sonnet-4-6",
-        description="OpenRouter model identifier",
+        description=(
+            "LLM model id for the chosen provider. For 'openrouter' (default): "
+            "OpenRouter notation (e.g. 'anthropic/claude-sonnet-4-6'). For 'livekit': "
+            "LiveKit Inference notation (e.g. 'openai/gpt-5.2-chat-latest')."
+        ),
     )
 
     # --- Observability ---
@@ -155,7 +179,6 @@ def load_env_walking_up(
 
 __all__ = [
     "BaseAgentSettings",
-    "LLMBackend",
     "LogFormat",
     "LogLevel",
     "OTelExporter",

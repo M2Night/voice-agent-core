@@ -246,7 +246,7 @@ def build_fish_stt(settings: BaseAgentSettings) -> FishSTT:
         raise ValueError("FISH_API_KEY is required to build Fish STT")
     return FishSTT(
         api_key=settings.fish_api_key,
-        language=settings.fish_stt_language,
+        language=settings.stt_language,
     )
 
 

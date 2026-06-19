@@ -17,7 +17,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FISH_API_KEY", "test-fish-key")
     monkeypatch.setenv("LIVEKIT_API_KEY", "test-lk-key")
     monkeypatch.setenv("LIVEKIT_API_SECRET", "test-lk-secret")
-    monkeypatch.setenv("LLM_BACKEND", "livekit")
+    monkeypatch.setenv("LLM_PROVIDER", "livekit")
 
 
 class TestBuildPipeline:
@@ -55,7 +55,7 @@ class TestBuildPipeline:
     ) -> None:
         # FISH ok but LIVEKIT creds missing → build_llm raises
         monkeypatch.setenv("FISH_API_KEY", "test-fish-key")
-        monkeypatch.setenv("LLM_BACKEND", "livekit")
+        monkeypatch.setenv("LLM_PROVIDER", "livekit")
         monkeypatch.delenv("LIVEKIT_API_KEY", raising=False)
         monkeypatch.delenv("LIVEKIT_API_SECRET", raising=False)
 

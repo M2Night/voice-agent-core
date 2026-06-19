@@ -73,26 +73,30 @@ class TestBaseAgentSettings:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Clear any leaked env vars
         for key in list(os.environ):
-            if key.upper().startswith(("LIVEKIT_", "FISH_", "LLM_", "OPENROUTER_", "OTEL_", "LOG_")):
+            if key.upper().startswith(
+                ("LIVEKIT_", "FISH_", "STT_", "TTS_", "LLM_", "OPENROUTER_", "OTEL_", "LOG_")
+            ):
                 monkeypatch.delenv(key, raising=False)
 
         s = BaseAgentSettings()
-        assert s.llm_backend == "livekit"
-        assert s.llm_model == "openai/gpt-5.2-chat-latest"
-        assert s.fish_tts_model == "s2-pro"
-        assert s.fish_tts_latency_mode == "balanced"
+        assert s.stt_provider == "fish"
+        assert s.tts_provider == "fish"
+        assert s.llm_provider == "openrouter"
+        assert s.llm_model == "anthropic/claude-sonnet-4-6"
+        assert s.tts_model == "s2-pro"
+        assert s.tts_latency_mode == "balanced"
         assert s.log_level == "INFO"
         assert s.log_format == "json"
         assert s.otel_metrics_exporter == "console"
 
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LIVEKIT_URL", "wss://test.livekit.cloud")
-        monkeypatch.setenv("FISH_VOICE_ID", "voice-123")
-        monkeypatch.setenv("LLM_BACKEND", "openrouter")
+        monkeypatch.setenv("TTS_VOICE_ID", "voice-123")
+        monkeypatch.setenv("LLM_PROVIDER", "openrouter")
 
         s = BaseAgentSettings()
         assert s.livekit_url == "wss://test.livekit.cloud"
-        assert s.fish_voice_id == "voice-123"
-        assert s.llm_backend == "openrouter"
+        assert s.tts_voice_id == "voice-123"
+        assert s.llm_provider == "openrouter"
 
 

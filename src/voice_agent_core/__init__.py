@@ -15,7 +15,6 @@ Public API re-exported here for convenience::
 
 from voice_agent_core.config import (
     BaseAgentSettings,
-    LLMBackend,
     LogFormat,
     LogLevel,
     OTelExporter,
@@ -23,14 +22,40 @@ from voice_agent_core.config import (
     load_env_walking_up,
     load_yaml,
 )
+from voice_agent_core.deepgram import build_deepgram_stt
 from voice_agent_core.fish import FishSTT, FishTTS, build_fish_stt, build_fish_tts
-from voice_agent_core.llm import build_llm
 from voice_agent_core.notify import (
     NotificationField,
     NotificationPayload,
     SlackNotifier,
 )
+from voice_agent_core.observability import (
+    MetricNames,
+    configure_logging,
+    configure_metrics,
+    get_logger,
+    get_meter,
+    setup_observability,
+    shutdown_observability,
+)
 from voice_agent_core.pipeline import PipelineComponents, build_pipeline
+from voice_agent_core.providers import (
+    LLMProvider,
+    STTProvider,
+    TTSProvider,
+    build_llm,
+    build_stt,
+    build_tts,
+    list_llm_providers,
+    list_stt_providers,
+    list_tts_providers,
+    llm_models,
+    register_llm,
+    register_stt,
+    register_tts,
+    stt_models,
+    tts_models,
+)
 from voice_agent_core.runtime import (
     build_session,
     default_prewarm,
@@ -43,15 +68,6 @@ from voice_agent_core.transcript import (
     format_transcript,
     summarize_transcript,
 )
-from voice_agent_core.observability import (
-    MetricNames,
-    configure_logging,
-    configure_metrics,
-    get_logger,
-    get_meter,
-    setup_observability,
-    shutdown_observability,
-)
 
 __version__ = "0.2.1"
 
@@ -60,7 +76,7 @@ __all__ = [
     "BaseAgentSettings",
     "FishSTT",
     "FishTTS",
-    "LLMBackend",
+    "LLMProvider",
     "LogFormat",
     "LogLevel",
     "MetricNames",
@@ -68,14 +84,19 @@ __all__ = [
     "NotificationPayload",
     "OTelExporter",
     "PipelineComponents",
+    "STTProvider",
     "SlackNotifier",
     "TTSLatencyMode",
+    "TTSProvider",
     "__version__",
+    "build_deepgram_stt",
     "build_fish_stt",
     "build_fish_tts",
     "build_llm",
     "build_pipeline",
     "build_session",
+    "build_stt",
+    "build_tts",
     "configure_logging",
     "configure_metrics",
     "default_prewarm",
@@ -84,10 +105,19 @@ __all__ = [
     "get_logger",
     "get_meter",
     "is_warmup_session",
+    "list_llm_providers",
+    "list_stt_providers",
+    "list_tts_providers",
+    "llm_models",
     "load_env_walking_up",
     "load_yaml",
+    "register_llm",
+    "register_stt",
+    "register_tts",
     "setup_observability",
     "shutdown_observability",
+    "stt_models",
     "summarize_transcript",
+    "tts_models",
     "warm_tts",
 ]
