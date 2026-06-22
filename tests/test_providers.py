@@ -6,6 +6,9 @@ verify the built-in Fish/LLM providers are registered.
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+
 import pytest
 
 from voice_agent_core import providers
@@ -51,6 +54,45 @@ class TestDeepgram:
         with pytest.raises(ValueError, match="DEEPGRAM_API_KEY"):
             build_stt(BaseAgentSettings())
 
+    def test_default_language_passed_to_plugin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeDeepgramSTT:
+            def __init__(self, **kwargs: object) -> None:
+                calls.append(kwargs)
+
+        fake = ModuleType("livekit.plugins.deepgram")
+        fake.STT = FakeDeepgramSTT  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "livekit.plugins.deepgram", fake)
+        monkeypatch.setenv("STT_PROVIDER", "deepgram")
+        monkeypatch.setenv("DEEPGRAM_API_KEY", "test-key")
+        monkeypatch.delenv("STT_LANGUAGE", raising=False)
+
+        build_stt(BaseAgentSettings())
+
+        assert calls[-1]["language"] == "en"
+
+    def test_explicit_multi_language_passed_to_plugin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeDeepgramSTT:
+            def __init__(self, **kwargs: object) -> None:
+                calls.append(kwargs)
+
+        fake = ModuleType("livekit.plugins.deepgram")
+        fake.STT = FakeDeepgramSTT  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "livekit.plugins.deepgram", fake)
+        monkeypatch.setenv("STT_PROVIDER", "deepgram")
+        monkeypatch.setenv("DEEPGRAM_API_KEY", "test-key")
+        monkeypatch.setenv("STT_LANGUAGE", "multi")
+
+        build_stt(BaseAgentSettings())
+
+        assert calls[-1]["language"] == "multi"
 
 class TestDispatch:
     def test_build_tts_uses_selected_provider(

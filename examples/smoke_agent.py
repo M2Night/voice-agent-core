@@ -58,6 +58,12 @@ load_env_walking_up(start=Path(__file__).parent)
 settings = SmokeSettings()
 setup_observability(settings, service_name="voice-agent-core-smoke")
 
+# LiveKit decides whether to start the local inference executor before any job
+# entrypoint runs. Importing the multilingual turn-detector plugin here registers
+# its inference runner early enough for local dev mode.
+if settings.turn_detection_mode == "multilingual":
+    from livekit.plugins.turn_detector.multilingual import MultilingualModel as _MultilingualModel  # noqa: F401
+
 server = AgentServer()
 # Module-level notifier — each session subprocess gets its own copy (forked from
 # the worker). Stateless: sharing initial config across forks is safe.

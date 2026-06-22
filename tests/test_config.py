@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
 from pydantic import ValidationError
 
 from voice_agent_core.config import (
@@ -71,6 +72,16 @@ class TestLoadEnvWalkingUp:
 
 
 class TestBaseAgentSettings:
+    def test_env_example_does_not_parse_comments_as_values(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        values = dotenv_values(root / "examples" / ".env.example")
+        offenders = {
+            key: value
+            for key, value in values.items()
+            if isinstance(value, str) and value.strip().startswith("#")
+        }
+        assert offenders == {}
+
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Clear any leaked env vars
         for key in list(os.environ):
@@ -81,11 +92,12 @@ class TestBaseAgentSettings:
                 monkeypatch.delenv(key, raising=False)
 
         s = BaseAgentSettings()
-        assert s.stt_provider == "fish"
+        assert s.stt_provider == "deepgram"
+        assert s.stt_language == "en"
         assert s.stt_stream_adapt is False
         assert s.tts_provider == "fish"
         assert s.llm_provider == "openrouter"
-        assert s.llm_model == "anthropic/claude-sonnet-4-6"
+        assert s.llm_model == "openai/gpt-5.4-mini"
         assert s.tts_model == "s2-pro"
         assert s.fish_tts_latency_mode == "balanced"
         assert s.turn_detection_mode == "multilingual"

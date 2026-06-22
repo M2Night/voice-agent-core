@@ -3,7 +3,7 @@
 Two concrete builders, registered into the provider registry (see ``providers.py``):
 
 - ``build_livekit_llm`` — LiveKit Inference (free for LiveKit Cloud users; no extra key)
-- ``build_openrouter_llm`` — OpenRouter (50+ models; requires ``OPENROUTER_API_KEY``)
+- ``build_openrouter_llm`` — OpenRouter (default; 50+ models; requires ``OPENROUTER_API_KEY``)
 
 The public dispatcher ``build_llm(settings)`` lives in ``providers.py`` and selects the
 builder by ``settings.llm_provider``. Both builders read the model id from

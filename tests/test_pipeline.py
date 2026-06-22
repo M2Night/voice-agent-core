@@ -23,6 +23,9 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LIVEKIT_API_KEY", "test-lk-key")
     monkeypatch.setenv("LIVEKIT_API_SECRET", "test-lk-secret")
     monkeypatch.setenv("LLM_PROVIDER", "livekit")
+    # Pin STT to fish: the default is now 'deepgram', but these tests exercise
+    # pipeline assembly with the keyless fish builder. Pinned like LLM_PROVIDER above.
+    monkeypatch.setenv("STT_PROVIDER", "fish")
 
 
 class _FakeSTT(STT):
@@ -175,7 +178,9 @@ class TestBuildPipeline:
     def test_propagates_fish_key_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # LIVEKIT_* set but FISH_API_KEY missing → build_fish_stt raises
+        # LIVEKIT_* set but FISH_API_KEY missing → build_fish_stt raises.
+        # Pin STT_PROVIDER=fish since the default is now deepgram.
+        monkeypatch.setenv("STT_PROVIDER", "fish")
         monkeypatch.setenv("LIVEKIT_API_KEY", "test-lk-key")
         monkeypatch.setenv("LIVEKIT_API_SECRET", "test-lk-secret")
         monkeypatch.delenv("FISH_API_KEY", raising=False)
@@ -186,7 +191,9 @@ class TestBuildPipeline:
     def test_propagates_llm_credential_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # FISH ok but LIVEKIT creds missing → build_llm raises
+        # FISH ok but LIVEKIT creds missing → build_llm raises. Pin STT to fish so
+        # STT (built before LLM) doesn't raise the deepgram-key error first.
+        monkeypatch.setenv("STT_PROVIDER", "fish")
         monkeypatch.setenv("FISH_API_KEY", "test-fish-key")
         monkeypatch.setenv("LLM_PROVIDER", "livekit")
         monkeypatch.delenv("LIVEKIT_API_KEY", raising=False)

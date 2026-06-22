@@ -25,16 +25,22 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _DEFAULT_MODEL = "nova-3"
+_DEFAULT_LANGUAGE = "en"
 
 
 def build_deepgram_stt(settings: BaseAgentSettings) -> agents_stt.STT:
     """Construct a streaming Deepgram STT from a settings object.
 
-    Reads ``stt_model`` (defaults to ``nova-3``) and ``stt_language`` (Fish-style
-    ``auto`` maps to Deepgram's multilingual ``multi``). Requires ``DEEPGRAM_API_KEY``.
+    Reads ``stt_model`` (defaults to ``nova-3``) and ``stt_language``. Deepgram
+    streaming needs an explicit language hint; the default is ``en`` for the common
+    English smoke/dev path. Set ``stt_language=multi`` explicitly for Nova-3
+    multilingual/code-switching. Requires ``DEEPGRAM_API_KEY``.
     """
     if not settings.deepgram_api_key:
         raise ValueError("DEEPGRAM_API_KEY is required to build Deepgram STT")
+
+    model = settings.stt_model or _DEFAULT_MODEL
+    language = settings.stt_language or _DEFAULT_LANGUAGE
 
     # RISK: this onboards Deepgram via LiveKit's first-party plugin. It's the lowest-
     # effort, lowest-latency path today (in-process, direct to Deepgram with our key —
@@ -49,10 +55,6 @@ def build_deepgram_stt(settings: BaseAgentSettings) -> agents_stt.STT:
             "install with: uv add 'livekit-agents[deepgram]'"
         ) from exc
 
-    model = settings.stt_model or _DEFAULT_MODEL
-    language = (
-        settings.stt_language if settings.stt_language not in ("", "auto") else "multi"
-    )
     log.info("stt.build", provider="deepgram", model=model, language=language)
     return deepgram.STT(
         model=model,

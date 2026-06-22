@@ -260,6 +260,11 @@ class _InstrumentedStream:
                 llm_to_audio_ms=llm_to_audio_ms,
                 stream_open_to_audio_ms=stream_to_audio_ms,
                 chars_before_audio=self._chars_buffered,
+                # A/B label: which wire format produced this first frame, so dumps
+                # (LK_DUMP_TTS=1) and logs self-identify across runs. wav → upstream
+                # routes through AudioStreamDecoder; pcm → raw passthrough.
+                output_format=self._owner.output_format,
+                sample_rate=self._owner.sample_rate,
             )
         return frame
 
@@ -271,7 +276,7 @@ def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     """Construct an instrumented Fish TTS from a settings object.
 
     Required env: ``FISH_API_KEY``. Optional: ``TTS_VOICE_ID``, ``TTS_MODEL``,
-    ``FISH_TTS_LATENCY_MODE``.
+    ``FISH_TTS_LATENCY_MODE``, ``FISH_TTS_OUTPUT_FORMAT``, ``FISH_TTS_SAMPLE_RATE``.
     """
     if not settings.fish_api_key:
         raise ValueError("FISH_API_KEY is required to build Fish TTS")
@@ -280,9 +285,12 @@ def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
         "api_key": settings.fish_api_key,
         "model": settings.tts_model,
         "latency_mode": settings.fish_tts_latency_mode,
+        "output_format": settings.fish_tts_output_format,
     }
     if settings.tts_voice_id:
         kwargs["voice_id"] = settings.tts_voice_id
+    if settings.fish_tts_sample_rate is not None:
+        kwargs["sample_rate"] = settings.fish_tts_sample_rate
 
     return FishTTS(**kwargs)
 

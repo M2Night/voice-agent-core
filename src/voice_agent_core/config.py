@@ -27,6 +27,10 @@ FishTTSLatencyMode = Literal["normal", "balanced", "low"]
 - ``balanced``: default tradeoff
 - ``normal``: standard latency, highest quality
 """
+FishTTSOutputFormat = Literal["wav", "pcm", "mp3", "opus"]
+"""Fish Audio TTS wire format. ``pcm`` (raw, default) is decoded by LiveKit's
+AudioEmitter as a passthrough; ``wav``/``mp3``/``opus`` route through a per-segment
+container decoder whose start-up transient can produce an audible first-phoneme click."""
 OTelExporter = Literal["console", "none"]
 TurnDetectionMode = Literal["multilingual", "vad", "stt"]
 """How to detect end-of-user-turn.
@@ -70,11 +74,11 @@ class BaseAgentSettings(BaseSettings):
     fish_api_key: str = Field(default="", description="Fish Audio API key (STT + TTS)")
     openrouter_api_key: str = Field(
         default="",
-        description="OpenRouter API key (used when llm_provider=openrouter, the default)",
+        description="OpenRouter API key (used when llm_provider=openrouter)",
     )
     deepgram_api_key: str = Field(
         default="",
-        description="Deepgram API key (only used when stt_provider=deepgram)",
+        description="Deepgram API key (required by default — stt_provider defaults to 'deepgram')",
     )
 
     # --- Fish provider config ---
@@ -82,19 +86,46 @@ class BaseAgentSettings(BaseSettings):
         default="balanced",
         description="Fish TTS latency/quality tradeoff (low | balanced | normal)",
     )
+    fish_tts_output_format: FishTTSOutputFormat = Field(
+        default="pcm",
+        description=(
+            "Fish TTS output format (wav | pcm | mp3 | opus). Defaults to 'pcm' to mitigate "
+            "the first-phoneme click/crackle: LiveKit passes raw pcm straight through, "
+            "while wav/mp3/opus go through a container decoder whose per-segment start-up "
+            "transient is audible at the start of each utterance. Set 'wav' to revert to "
+            "the upstream plugin default."
+        ),
+    )
+    fish_tts_sample_rate: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Optional Fish TTS sample rate in Hz. None keeps the Fish plugin per-format "
+            "default (pcm/wav 24000, opus 48000, mp3 32000)."
+        ),
+    )
 
     # --- STT (provider → model) ---
     stt_provider: str = Field(
-        default="fish",
-        description="STT provider name; must be registered in providers.py (default 'fish')",
+        default="deepgram",
+        description=(
+            "STT provider name; must be registered in providers.py. Defaults to "
+            "'deepgram' (native streaming, low transcription latency); requires "
+            "DEEPGRAM_API_KEY. Set 'fish' for Fish batch ASR (no extra key, higher "
+            "latency — pair with STT_STREAM_ADAPT=true to soften it)."
+        ),
     )
     stt_model: str = Field(
         default="",
         description="STT model id for the chosen provider ('' = provider default; Fish ASR has one model)",
     )
     stt_language: str = Field(
-        default="auto",
-        description="STT language ('auto' for auto-detect)",
+        default="en",
+        description=(
+            "Provider-specific STT language hint. 'auto' uses provider-specific "
+            "behavior and is supported by Fish; Deepgram streaming requires an "
+            "explicit value such as 'en' or 'multi'."
+        ),
     )
     stt_stream_adapt: bool = Field(
         default=False,
@@ -129,11 +160,11 @@ class BaseAgentSettings(BaseSettings):
         description="LLM provider name; must be registered in providers.py (default 'openrouter')",
     )
     llm_model: str = Field(
-        default="anthropic/claude-sonnet-4-6",
+        default="openai/gpt-5.4-mini",
         description=(
             "LLM model id for the chosen provider. For 'openrouter' (default): "
-            "OpenRouter notation (e.g. 'anthropic/claude-sonnet-4-6'). For 'livekit': "
-            "LiveKit Inference notation (e.g. 'openai/gpt-5.2-chat-latest')."
+            "OpenRouter notation (e.g. 'openai/gpt-5.4-mini'). For 'livekit': "
+            "LiveKit Inference model id configured for your LiveKit account."
         ),
     )
 

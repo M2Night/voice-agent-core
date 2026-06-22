@@ -11,7 +11,8 @@ single source of truth for two things:
    equivalents) expose what's available, so a UI (e.g. a future dashboard) can render
    provider → model dropdowns from the same data.
 
-Fish is the default for STT and TTS; OpenRouter is the default LLM. Adding a new
+Deepgram is the default STT, Fish is the default TTS, and OpenRouter is the default
+LLM. Adding a new
 provider is a single ``register_*`` call — no change to this module or to
 ``pipeline.py`` — and can be done from outside the library::
 
