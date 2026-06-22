@@ -90,6 +90,14 @@ class BaseAgentSettings(BaseSettings):
         default="auto",
         description="STT language ('auto' for auto-detect)",
     )
+    stt_stream_adapt: bool = Field(
+        default=False,
+        description=(
+            "Wrap non-streaming STT providers with a VAD-based StreamAdapter. Useful "
+            "for testing lower-latency Fish batch ASR behavior; native streaming "
+            "providers such as Deepgram are left unchanged."
+        ),
+    )
 
     # --- TTS (provider → model → voice) ---
     tts_provider: str = Field(

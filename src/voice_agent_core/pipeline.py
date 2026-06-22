@@ -33,6 +33,7 @@ from livekit.plugins import silero
 
 from voice_agent_core.observability import get_logger
 from voice_agent_core.providers import build_llm, build_stt, build_tts
+from voice_agent_core.stt import StreamAdapter
 
 if TYPE_CHECKING:
     from livekit.plugins.turn_detector.multilingual import MultilingualModel
@@ -70,6 +71,7 @@ def build_pipeline(
     settings: BaseAgentSettings,
     *,
     vad: silero.VAD | None = None,
+    stream_adapter_vad: silero.VAD | None = None,
     turn_detection: str | MultilingualModel | None = None,
 ) -> PipelineComponents:
     """Assemble a LiveKit voice pipeline from settings.
@@ -77,7 +79,8 @@ def build_pipeline(
     No job context required: ``turn_detection`` defaults to the mode marker from
     ``settings.turn_detection_mode`` and the (context-bound) transformer model is
     constructed later in ``build_session``. Pass ``vad=`` a prewarmed instance in
-    production; pass ``turn_detection=`` to inject your own detector.
+    production; pass ``stream_adapter_vad=`` to give the batch-STT adapter a
+    dedicated VAD instance; pass ``turn_detection=`` to inject your own detector.
     """
     log.info(
         "pipeline.build_start",
@@ -85,15 +88,32 @@ def build_pipeline(
         tts_provider=settings.tts_provider,
         llm_provider=settings.llm_provider,
         turn_detection_mode=settings.turn_detection_mode,
+        stt_stream_adapt=settings.stt_stream_adapt,
         preemptive_generation=settings.preemptive_generation,
         min_endpointing_delay=settings.min_endpointing_delay,
     )
 
+    stt = build_stt(settings)
+    pipeline_vad = vad if vad is not None else silero.VAD.load()
+    if settings.stt_stream_adapt:
+        if stt.capabilities.streaming:
+            log.info(
+                "stt.stream_adapter_skipped",
+                provider=settings.stt_provider,
+                reason="provider_already_streaming",
+            )
+        else:
+            stt = StreamAdapter(
+                stt=stt,
+                vad=stream_adapter_vad if stream_adapter_vad is not None else pipeline_vad,
+            )
+            log.info("stt.stream_adapter_enabled", provider=settings.stt_provider)
+
     pipeline = PipelineComponents(
-        stt=build_stt(settings),
+        stt=stt,
         tts=build_tts(settings),
         llm=build_llm(settings),
-        vad=vad if vad is not None else silero.VAD.load(),
+        vad=pipeline_vad,
         turn_detection=(
             turn_detection if turn_detection is not None else settings.turn_detection_mode
         ),

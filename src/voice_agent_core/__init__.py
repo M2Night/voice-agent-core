@@ -63,6 +63,7 @@ from voice_agent_core.runtime import (
     is_warmup_session,
     warm_tts,
 )
+from voice_agent_core.stt import StreamAdapter
 from voice_agent_core.transcript import (
     DEFAULT_SUMMARY_INSTRUCTION,
     format_transcript,
@@ -86,6 +87,7 @@ __all__ = [
     "PipelineComponents",
     "STTProvider",
     "SlackNotifier",
+    "StreamAdapter",
     "TTSLatencyMode",
     "TTSProvider",
     "__version__",

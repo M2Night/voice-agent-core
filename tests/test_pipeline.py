@@ -6,10 +6,15 @@ We pass a fake VAD object in tests to avoid loading the real silero model
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
+from livekit.agents.stt import STT, SpeechEvent, SpeechEventType, STTCapabilities
+from livekit.agents.types import APIConnectOptions
 
 from voice_agent_core.config import BaseAgentSettings
 from voice_agent_core.pipeline import PipelineComponents, build_pipeline
+from voice_agent_core.stt import StreamAdapter
 
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -18,6 +23,34 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LIVEKIT_API_KEY", "test-lk-key")
     monkeypatch.setenv("LIVEKIT_API_SECRET", "test-lk-secret")
     monkeypatch.setenv("LLM_PROVIDER", "livekit")
+
+
+class _FakeSTT(STT):
+    def __init__(self, *, streaming: bool) -> None:
+        super().__init__(
+            capabilities=STTCapabilities(
+                streaming=streaming,
+                interim_results=False,
+                offline_recognize=True,
+            )
+        )
+
+    @property
+    def model(self) -> str:
+        return "fake-stt"
+
+    @property
+    def provider(self) -> str:
+        return "fake"
+
+    async def _recognize_impl(
+        self,
+        buffer,
+        *,
+        language="en",
+        conn_options: APIConnectOptions,
+    ) -> SpeechEvent:
+        return SpeechEvent(type=SpeechEventType.FINAL_TRANSCRIPT)
 
 
 class TestBuildPipeline:
@@ -85,6 +118,59 @@ class TestBuildPipeline:
         monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0.25")
         pipeline = build_pipeline(BaseAgentSettings(), vad=object())
         assert pipeline.min_endpointing_delay == 0.25
+
+    def test_stt_stream_adapt_defaults_false_no_wrap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_stt = _FakeSTT(streaming=False)
+        with (
+            patch("voice_agent_core.pipeline.build_stt", return_value=fake_stt),
+            patch("voice_agent_core.pipeline.build_tts", return_value=object()),
+            patch("voice_agent_core.pipeline.build_llm", return_value=object()),
+        ):
+            pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+
+        assert pipeline.stt is fake_stt
+
+    def test_stt_stream_adapt_wraps_non_streaming_stt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("STT_STREAM_ADAPT", "true")
+        fake_stt = _FakeSTT(streaming=False)
+        fake_vad = object()
+        stream_adapter_vad = object()
+
+        with (
+            patch("voice_agent_core.pipeline.build_stt", return_value=fake_stt),
+            patch("voice_agent_core.pipeline.build_tts", return_value=object()),
+            patch("voice_agent_core.pipeline.build_llm", return_value=object()),
+        ):
+            pipeline = build_pipeline(
+                BaseAgentSettings(),
+                vad=fake_vad,
+                stream_adapter_vad=stream_adapter_vad,
+            )
+
+        assert isinstance(pipeline.stt, StreamAdapter)
+        assert pipeline.stt.wrapped_stt is fake_stt
+        assert pipeline.stt.vad is stream_adapter_vad
+        assert pipeline.stt.capabilities.streaming is True
+        assert pipeline.vad is fake_vad
+
+    def test_stt_stream_adapt_skips_streaming_stt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("STT_STREAM_ADAPT", "true")
+        fake_stt = _FakeSTT(streaming=True)
+
+        with (
+            patch("voice_agent_core.pipeline.build_stt", return_value=fake_stt),
+            patch("voice_agent_core.pipeline.build_tts", return_value=object()),
+            patch("voice_agent_core.pipeline.build_llm", return_value=object()),
+        ):
+            pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+
+        assert pipeline.stt is fake_stt
 
     def test_propagates_fish_key_error(
         self, monkeypatch: pytest.MonkeyPatch

@@ -82,6 +82,7 @@ class TestBaseAgentSettings:
 
         s = BaseAgentSettings()
         assert s.stt_provider == "fish"
+        assert s.stt_stream_adapt is False
         assert s.tts_provider == "fish"
         assert s.llm_provider == "openrouter"
         assert s.llm_model == "anthropic/claude-sonnet-4-6"
@@ -98,6 +99,7 @@ class TestBaseAgentSettings:
         monkeypatch.setenv("LIVEKIT_URL", "wss://test.livekit.cloud")
         monkeypatch.setenv("TTS_VOICE_ID", "voice-123")
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+        monkeypatch.setenv("STT_STREAM_ADAPT", "true")
         monkeypatch.setenv("PREEMPTIVE_GENERATION", "false")
         monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0.3")
 
@@ -105,6 +107,7 @@ class TestBaseAgentSettings:
         assert s.livekit_url == "wss://test.livekit.cloud"
         assert s.tts_voice_id == "voice-123"
         assert s.llm_provider == "openrouter"
+        assert s.stt_stream_adapt is True
         assert s.preemptive_generation is False
         assert s.min_endpointing_delay == 0.3
 
@@ -124,5 +127,4 @@ class TestBaseAgentSettings:
         monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0")
         s = BaseAgentSettings()
         assert s.min_endpointing_delay == 0.0
-
 
