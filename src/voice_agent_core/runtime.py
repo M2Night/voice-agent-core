@@ -47,7 +47,7 @@ from livekit.agents import (
     room_io,
 )
 from livekit.agents import tts as agents_tts
-from livekit.agents.voice.turn import PreemptiveGenerationOptions
+from livekit.agents.voice.turn import EndpointingOptions, PreemptiveGenerationOptions
 from livekit.plugins import noise_cancellation, silero
 
 from voice_agent_core.observability import get_logger
@@ -121,10 +121,10 @@ def build_session(
     Defaults applied:
 
     - STT / TTS / LLM / VAD wired from the pipeline
-    - ``turn_handling`` wraps ``pipeline.turn_detection`` and
-      ``preemptive_generation`` inside a single ``TurnHandlingOptions`` —
-      this is the v1.5+ API; passing ``preemptive_generation`` directly to
-      ``AgentSession`` was deprecated and removed in v2.0.
+    - ``turn_handling`` wraps ``pipeline.turn_detection``,
+      ``preemptive_generation``, and endpointing config inside a single
+      ``TurnHandlingOptions``. This is the v1.5+ API; passing these turn-related
+      knobs directly to ``AgentSession`` was deprecated and removed in v2.0.
 
     ``preemptive_generation`` resolution (highest precedence first):
 
@@ -193,11 +193,13 @@ def build_session(
         "vad": pipeline.vad,
         "turn_handling": TurnHandlingOptions(
             turn_detection=td,
+            endpointing=EndpointingOptions(
+                min_delay=effective_min_endpointing,
+            ),
             preemptive_generation=PreemptiveGenerationOptions(
                 enabled=enabled,
             ),
         ),
-        "min_endpointing_delay": effective_min_endpointing,
     }
     kwargs.update(overrides)
     return AgentSession(**kwargs)

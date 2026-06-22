@@ -169,13 +169,17 @@ class TestBuildSession:
         pipeline.turn_detection = "stt"
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline)
-        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0
+        kwargs = agent_session_cls.call_args.kwargs
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0
 
         pipeline = self._fake_pipeline()
         pipeline.turn_detection = "vad"
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline)
-        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.5
+        kwargs = agent_session_cls.call_args.kwargs
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0.5
 
     def test_min_endpointing_delay_flows_from_pipeline_over_mode_default(self) -> None:
         """A value carried on the pipeline (settings/env) overrides the mode-aware
@@ -184,13 +188,17 @@ class TestBuildSession:
         pipeline.turn_detection = "vad"  # mode default would be 0.5
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline)
-        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.2
+        kwargs = agent_session_cls.call_args.kwargs
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0.2
 
         pipeline = self._fake_pipeline(min_endpointing_delay=0.0)
         pipeline.turn_detection = "vad"
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline)
-        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.0
+        kwargs = agent_session_cls.call_args.kwargs
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0.0
 
     def test_explicit_min_endpointing_delay_overrides_pipeline(self) -> None:
         """Explicit arg beats both the pipeline value and the mode-aware default."""
@@ -198,7 +206,9 @@ class TestBuildSession:
         pipeline.turn_detection = "vad"
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline, min_endpointing_delay=0.9)
-        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.9
+        kwargs = agent_session_cls.call_args.kwargs
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0.9
 
     def test_extra_kwargs_passed_through(self) -> None:
         pipeline = self._fake_pipeline()
@@ -219,7 +229,8 @@ class TestBuildSession:
             build_session(pipeline)
         kwargs = agent_session_cls.call_args.kwargs
         assert kwargs["turn_handling"]["turn_detection"] is fake_model
-        assert kwargs["min_endpointing_delay"] == 0
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0
 
     def test_vad_marker_passthrough_with_buffer(self) -> None:
         # "vad" passes straight through; VAD-only needs the 0.5s silence buffer.
@@ -229,7 +240,8 @@ class TestBuildSession:
             build_session(pipeline)
         kwargs = agent_session_cls.call_args.kwargs
         assert kwargs["turn_handling"]["turn_detection"] == "vad"
-        assert kwargs["min_endpointing_delay"] == 0.5
+        assert "min_endpointing_delay" not in kwargs
+        assert kwargs["turn_handling"]["endpointing"]["min_delay"] == 0.5
 
 
 class TestWarmTts:
