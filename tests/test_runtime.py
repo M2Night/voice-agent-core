@@ -68,13 +68,14 @@ class TestBuildSession:
     """build_session should pass the pipeline's components into AgentSession
     with sane defaults (preemptive_generation=True, turn_handling wrapper)."""
 
-    def _fake_pipeline(self) -> SimpleNamespace:
+    def _fake_pipeline(self, preemptive_generation: bool = True) -> SimpleNamespace:
         return SimpleNamespace(
             stt=MagicMock(name="stt"),
             tts=MagicMock(name="tts"),
             llm=MagicMock(name="llm"),
             vad=MagicMock(name="vad"),
             turn_detection=MagicMock(name="turn_detection"),
+            preemptive_generation=preemptive_generation,
         )
 
     def test_passes_pipeline_components_through(self) -> None:
@@ -99,8 +100,8 @@ class TestBuildSession:
     def test_preemptive_generation_defaults_true(self) -> None:
         """preemptive_generation lives inside TurnHandlingOptions in livekit-agents
         v1.5+ (passing it directly to AgentSession was deprecated, removed in v2).
-        Default should still surface as enabled=True so existing demos don't
-        need to change their build_session calls."""
+        With no explicit arg, build_session reads it off the pipeline; the default
+        pipeline carries True so existing demos don't need to change their calls."""
         pipeline = self._fake_pipeline()
         with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
             build_session(pipeline)
@@ -114,6 +115,47 @@ class TestBuildSession:
             build_session(pipeline, preemptive_generation=False)
         kwargs = agent_session_cls.call_args.kwargs
         assert kwargs["turn_handling"]["preemptive_generation"]["enabled"] is False
+
+    def test_preemptive_generation_flows_from_pipeline(self) -> None:
+        """settings → pipeline.preemptive_generation → session, with no explicit arg.
+        A pipeline carrying False (e.g. PREEMPTIVE_GENERATION=false) disables it."""
+        pipeline = self._fake_pipeline(preemptive_generation=False)
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)  # no explicit arg → falls back to the pipeline
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"]["preemptive_generation"]["enabled"] is False
+
+    def test_explicit_arg_overrides_pipeline_value(self) -> None:
+        """Explicit preemptive_generation=True must win even when the pipeline
+        (settings/env) carries False. Guards the `is not None` sentinel: a plain
+        truthiness check would also let an explicit False fall through, so test both
+        directions of override."""
+        pipeline = self._fake_pipeline(preemptive_generation=False)
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline, preemptive_generation=True)
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"]["preemptive_generation"]["enabled"] is True
+
+        # ...and the reverse: explicit False over a pipeline carrying True.
+        pipeline = self._fake_pipeline(preemptive_generation=True)
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline, preemptive_generation=False)
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"]["preemptive_generation"]["enabled"] is False
+
+    def test_explicit_turn_handling_override_wins(self) -> None:
+        """A full turn_handling=... override replaces the wrapper entirely, beating
+        both the explicit preemptive_generation arg and the pipeline value."""
+        pipeline = self._fake_pipeline(preemptive_generation=True)
+        sentinel = object()
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(
+                pipeline,
+                preemptive_generation=True,
+                turn_handling=sentinel,
+            )
+        kwargs = agent_session_cls.call_args.kwargs
+        assert kwargs["turn_handling"] is sentinel
 
     def test_extra_kwargs_passed_through(self) -> None:
         pipeline = self._fake_pipeline()

@@ -74,7 +74,8 @@ class TestBaseAgentSettings:
         # Clear any leaked env vars
         for key in list(os.environ):
             if key.upper().startswith(
-                ("LIVEKIT_", "FISH_", "STT_", "TTS_", "LLM_", "OPENROUTER_", "OTEL_", "LOG_", "TURN_")
+                ("LIVEKIT_", "FISH_", "STT_", "TTS_", "LLM_", "OPENROUTER_", "OTEL_",
+                 "LOG_", "TURN_", "PREEMPTIVE_")
             ):
                 monkeypatch.delenv(key, raising=False)
 
@@ -86,6 +87,7 @@ class TestBaseAgentSettings:
         assert s.tts_model == "s2-pro"
         assert s.turn_detection_mode == "multilingual"
         assert s.tts_latency_mode == "balanced"
+        assert s.preemptive_generation is True
         assert s.log_level == "INFO"
         assert s.log_format == "json"
         assert s.otel_metrics_exporter == "console"
@@ -94,10 +96,12 @@ class TestBaseAgentSettings:
         monkeypatch.setenv("LIVEKIT_URL", "wss://test.livekit.cloud")
         monkeypatch.setenv("TTS_VOICE_ID", "voice-123")
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+        monkeypatch.setenv("PREEMPTIVE_GENERATION", "false")
 
         s = BaseAgentSettings()
         assert s.livekit_url == "wss://test.livekit.cloud"
         assert s.tts_voice_id == "voice-123"
         assert s.llm_provider == "openrouter"
+        assert s.preemptive_generation is False
 
 

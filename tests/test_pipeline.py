@@ -54,6 +54,23 @@ class TestBuildPipeline:
         pipeline = build_pipeline(BaseAgentSettings(), vad=object())
         assert pipeline.turn_detection == "vad"
 
+    def test_preemptive_generation_defaults_true_on_pipeline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_required_env(monkeypatch)
+        pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+        assert pipeline.preemptive_generation is True
+
+    def test_preemptive_generation_env_false_carried_to_pipeline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # PREEMPTIVE_GENERATION=false → settings → carried onto the pipeline bundle,
+        # which is where build_session later reads it from.
+        _set_required_env(monkeypatch)
+        monkeypatch.setenv("PREEMPTIVE_GENERATION", "false")
+        pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+        assert pipeline.preemptive_generation is False
+
     def test_propagates_fish_key_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -55,6 +55,11 @@ class PipelineComponents:
     llm: agents_llm.LLM
     vad: silero.VAD
     turn_detection: str | MultilingualModel
+    # Provider-independent session behavior carried from settings, mirroring
+    # turn_detection: build_pipeline sets it from settings.preemptive_generation,
+    # build_session reads it off the bundle (unless an explicit arg overrides).
+    # Defaulted so direct PipelineComponents construction stays non-breaking.
+    preemptive_generation: bool = True
 
 
 def build_pipeline(
@@ -76,6 +81,7 @@ def build_pipeline(
         tts_provider=settings.tts_provider,
         llm_provider=settings.llm_provider,
         turn_detection_mode=settings.turn_detection_mode,
+        preemptive_generation=settings.preemptive_generation,
     )
 
     pipeline = PipelineComponents(
@@ -86,6 +92,7 @@ def build_pipeline(
         turn_detection=(
             turn_detection if turn_detection is not None else settings.turn_detection_mode
         ),
+        preemptive_generation=settings.preemptive_generation,
     )
 
     log.info("pipeline.build_done")

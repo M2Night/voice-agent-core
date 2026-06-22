@@ -102,9 +102,12 @@ async def entry(ctx: JobContext) -> None:
     # synth opens a new socket). It also burns Fish billing on a junk synth.
     # See warm_tts docstring; the helper is kept for future providers.
 
-    # build_session wraps turn_detection AND preemptive_generation (enabled
-    # by default) inside TurnHandlingOptions — the v1.5+ API. Override any
-    # of these via kwargs.
+    # build_session wraps turn_detection AND preemptive_generation inside
+    # TurnHandlingOptions — the v1.5+ API. preemptive_generation is carried on
+    # the pipeline from settings.preemptive_generation (the PREEMPTIVE_GENERATION
+    # env var, default true), so flip it via env without touching this call. Pass
+    # build_session(pipeline, preemptive_generation=...) to force a value, or a
+    # full turn_handling=... kwarg to override the wrapper entirely.
     session = build_session(pipeline)
 
     async def notify_session_ended(close_event) -> None:

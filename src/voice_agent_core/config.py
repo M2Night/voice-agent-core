@@ -136,6 +136,18 @@ class BaseAgentSettings(BaseSettings):
         ),
     )
 
+    # --- Session behavior ---
+    preemptive_generation: bool = Field(
+        default=True,
+        description=(
+            "Start LLM generation before end-of-turn is fully confirmed. True (default) "
+            "lowers perceived response latency for simple conversational flows; set false "
+            "for tool-heavy / high-precision flows (e.g. customer support) where premature "
+            "generations may be discarded, waste tokens, or produce stale tool-call plans. "
+            "Provider-independent LiveKit session knob."
+        ),
+    )
+
     # --- Observability ---
     log_level: LogLevel = Field(default="INFO", description="Root log level")
     log_format: LogFormat = Field(

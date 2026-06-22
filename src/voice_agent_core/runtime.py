@@ -112,7 +112,7 @@ def default_room_options() -> room_io.RoomOptions:
 def build_session(
     pipeline: PipelineComponents,
     *,
-    preemptive_generation: bool = True,
+    preemptive_generation: bool | None = None,
     **overrides: Any,
 ) -> AgentSession:
     """Assemble an ``AgentSession`` from a pipeline with the standard defaults.
@@ -124,13 +124,23 @@ def build_session(
       ``preemptive_generation`` inside a single ``TurnHandlingOptions`` —
       this is the v1.5+ API; passing ``preemptive_generation`` directly to
       ``AgentSession`` was deprecated and removed in v2.0.
-    - ``preemptive_generation=True`` so the LLM starts generating before
-      end-of-turn is fully confirmed (lower first-token latency at the cost
-      of occasional discarded responses)
+
+    ``preemptive_generation`` resolution (highest precedence first):
+
+    1. an explicit ``preemptive_generation=`` argument here (``None`` = unset)
+    2. ``pipeline.preemptive_generation`` (set by ``build_pipeline`` from
+       ``settings.preemptive_generation`` / the ``PREEMPTIVE_GENERATION`` env var)
+    3. the ``PipelineComponents`` field default, ``True``
+
+    The sentinel ``None`` default is what lets the env-driven setting win when the
+    caller doesn't pass the arg, while still letting a caller force a value. When on,
+    the LLM starts generating before end-of-turn is confirmed (lower first-token
+    latency at the cost of occasional discarded responses); turn it off for tool-heavy
+    flows where premature generations waste tokens.
 
     Any extra kwargs in ``overrides`` flow straight to ``AgentSession`` and
-    take precedence — e.g. pass your own ``turn_handling=...`` to override
-    the wrapper entirely.
+    take precedence — e.g. pass your own ``turn_handling=...`` to override the
+    wrapper (and the resolved ``preemptive_generation``) entirely.
 
     Turn detection: ``pipeline.turn_detection`` is a mode marker. The
     ``"multilingual"`` transformer model is constructed *here* (inside the session
@@ -153,6 +163,14 @@ def build_session(
 
     default_min_endpointing = 0.5 if pipeline.turn_detection == "vad" else 0
 
+    # Explicit arg wins; otherwise fall back to the value carried on the pipeline
+    # (settings/env). `is not None` (not truthiness) so an explicit False still wins.
+    enabled = (
+        preemptive_generation
+        if preemptive_generation is not None
+        else pipeline.preemptive_generation
+    )
+
     kwargs: dict[str, Any] = {
         "stt": pipeline.stt,
         "tts": pipeline.tts,
@@ -161,7 +179,7 @@ def build_session(
         "turn_handling": TurnHandlingOptions(
             turn_detection=td,
             preemptive_generation=PreemptiveGenerationOptions(
-                enabled=preemptive_generation,
+                enabled=enabled,
             ),
         ),
         "min_endpointing_delay": default_min_endpointing,
