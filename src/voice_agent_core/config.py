@@ -147,6 +147,19 @@ class BaseAgentSettings(BaseSettings):
             "Provider-independent LiveKit session knob."
         ),
     )
+    min_endpointing_delay: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Minimum silence (seconds) to wait before treating the user's turn as "
+            "ended. Lower = snappier responses but more risk of cutting users off / "
+            "barging in; higher = safer but laggier. None (default) keeps the mode-aware "
+            "default: 0.5 for TURN_DETECTION_MODE=vad (the silence buffer is load-bearing), "
+            "0 for multilingual/stt (they already carry a strong end-of-turn signal). "
+            "Set a non-negative float to override; negative values fail validation. "
+            "Provider-independent LiveKit session knob."
+        ),
+    )
 
     # --- Observability ---
     log_level: LogLevel = Field(default="INFO", description="Root log level")

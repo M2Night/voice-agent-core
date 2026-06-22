@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from voice_agent_core.config import (
     BaseAgentSettings,
@@ -75,7 +76,7 @@ class TestBaseAgentSettings:
         for key in list(os.environ):
             if key.upper().startswith(
                 ("LIVEKIT_", "FISH_", "STT_", "TTS_", "LLM_", "OPENROUTER_", "OTEL_",
-                 "LOG_", "TURN_", "PREEMPTIVE_")
+                 "LOG_", "TURN_", "PREEMPTIVE_", "MIN_")
             ):
                 monkeypatch.delenv(key, raising=False)
 
@@ -88,6 +89,7 @@ class TestBaseAgentSettings:
         assert s.turn_detection_mode == "multilingual"
         assert s.tts_latency_mode == "balanced"
         assert s.preemptive_generation is True
+        assert s.min_endpointing_delay is None
         assert s.log_level == "INFO"
         assert s.log_format == "json"
         assert s.otel_metrics_exporter == "console"
@@ -97,11 +99,30 @@ class TestBaseAgentSettings:
         monkeypatch.setenv("TTS_VOICE_ID", "voice-123")
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
         monkeypatch.setenv("PREEMPTIVE_GENERATION", "false")
+        monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0.3")
 
         s = BaseAgentSettings()
         assert s.livekit_url == "wss://test.livekit.cloud"
         assert s.tts_voice_id == "voice-123"
         assert s.llm_provider == "openrouter"
         assert s.preemptive_generation is False
+        assert s.min_endpointing_delay == 0.3
+
+    def test_min_endpointing_delay_rejects_negative(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ge=0 constraint: a negative delay is nonsensical and must fail config load
+        # loudly rather than silently clamping.
+        monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "-0.1")
+        with pytest.raises(ValidationError):
+            BaseAgentSettings()
+
+    def test_min_endpointing_delay_accepts_zero(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 0 is valid (force "no delay"), distinct from None (mode-aware default).
+        monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0")
+        s = BaseAgentSettings()
+        assert s.min_endpointing_delay == 0.0
 
 

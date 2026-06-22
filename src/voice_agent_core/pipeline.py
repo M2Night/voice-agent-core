@@ -60,6 +60,10 @@ class PipelineComponents:
     # build_session reads it off the bundle (unless an explicit arg overrides).
     # Defaulted so direct PipelineComponents construction stays non-breaking.
     preemptive_generation: bool = True
+    # Mode-aware end-of-turn delay override, same carry pattern as above.
+    # None = use build_session's mode-aware default (0.5 for vad, 0 otherwise);
+    # a non-negative float overrides it.
+    min_endpointing_delay: float | None = None
 
 
 def build_pipeline(
@@ -82,6 +86,7 @@ def build_pipeline(
         llm_provider=settings.llm_provider,
         turn_detection_mode=settings.turn_detection_mode,
         preemptive_generation=settings.preemptive_generation,
+        min_endpointing_delay=settings.min_endpointing_delay,
     )
 
     pipeline = PipelineComponents(
@@ -93,6 +98,7 @@ def build_pipeline(
             turn_detection if turn_detection is not None else settings.turn_detection_mode
         ),
         preemptive_generation=settings.preemptive_generation,
+        min_endpointing_delay=settings.min_endpointing_delay,
     )
 
     log.info("pipeline.build_done")

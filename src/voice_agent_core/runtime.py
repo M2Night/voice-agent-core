@@ -113,6 +113,7 @@ def build_session(
     pipeline: PipelineComponents,
     *,
     preemptive_generation: bool | None = None,
+    min_endpointing_delay: float | None = None,
     **overrides: Any,
 ) -> AgentSession:
     """Assemble an ``AgentSession`` from a pipeline with the standard defaults.
@@ -148,10 +149,12 @@ def build_session(
     context-free. ``"vad"`` / ``"stt"`` pass straight through as LiveKit strings; an
     injected detector instance is used as-is.
 
-    ``min_endpointing_delay`` is mode-aware: ``0`` for the transformer / STT detector
-    (it already has strong end-of-turn signal — saves 200-500ms/turn), but ``0.5`` for
-    VAD-only mode, where the silence buffer is load-bearing (delay 0 would clip users
-    mid-pause). Override either via ``overrides``.
+    ``min_endpointing_delay`` resolution mirrors ``preemptive_generation`` (explicit
+    arg > ``pipeline.min_endpointing_delay`` from settings/env > mode-aware default).
+    The mode-aware default is ``0`` for the transformer / STT detector (already a strong
+    end-of-turn signal — saves 200-500ms/turn) and ``0.5`` for VAD-only mode, where the
+    silence buffer is load-bearing (delay 0 would clip users mid-pause). ``None`` at any
+    layer defers to the next; pass a non-negative float to override.
     """
     td = pipeline.turn_detection
     if td == "multilingual":
@@ -171,6 +174,18 @@ def build_session(
         else pipeline.preemptive_generation
     )
 
+    # Same precedence as preemptive_generation: explicit arg > pipeline/settings >
+    # mode-aware default. None at each layer means "defer to the next"; a 0.0 the user
+    # set survives (it's not None), so they can force "no delay" on VAD mode.
+    configured_delay = (
+        min_endpointing_delay
+        if min_endpointing_delay is not None
+        else pipeline.min_endpointing_delay
+    )
+    effective_min_endpointing = (
+        configured_delay if configured_delay is not None else default_min_endpointing
+    )
+
     kwargs: dict[str, Any] = {
         "stt": pipeline.stt,
         "tts": pipeline.tts,
@@ -182,7 +197,7 @@ def build_session(
                 enabled=enabled,
             ),
         ),
-        "min_endpointing_delay": default_min_endpointing,
+        "min_endpointing_delay": effective_min_endpointing,
     }
     kwargs.update(overrides)
     return AgentSession(**kwargs)

@@ -68,7 +68,11 @@ class TestBuildSession:
     """build_session should pass the pipeline's components into AgentSession
     with sane defaults (preemptive_generation=True, turn_handling wrapper)."""
 
-    def _fake_pipeline(self, preemptive_generation: bool = True) -> SimpleNamespace:
+    def _fake_pipeline(
+        self,
+        preemptive_generation: bool = True,
+        min_endpointing_delay: float | None = None,
+    ) -> SimpleNamespace:
         return SimpleNamespace(
             stt=MagicMock(name="stt"),
             tts=MagicMock(name="tts"),
@@ -76,6 +80,7 @@ class TestBuildSession:
             vad=MagicMock(name="vad"),
             turn_detection=MagicMock(name="turn_detection"),
             preemptive_generation=preemptive_generation,
+            min_endpointing_delay=min_endpointing_delay,
         )
 
     def test_passes_pipeline_components_through(self) -> None:
@@ -156,6 +161,44 @@ class TestBuildSession:
             )
         kwargs = agent_session_cls.call_args.kwargs
         assert kwargs["turn_handling"] is sentinel
+
+    def test_min_endpointing_delay_mode_aware_default_when_unset(self) -> None:
+        """No explicit arg and pipeline carries None → fall back to the mode-aware
+        default (0 for non-vad, 0.5 for vad)."""
+        pipeline = self._fake_pipeline()  # min_endpointing_delay=None
+        pipeline.turn_detection = "stt"
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)
+        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0
+
+        pipeline = self._fake_pipeline()
+        pipeline.turn_detection = "vad"
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)
+        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.5
+
+    def test_min_endpointing_delay_flows_from_pipeline_over_mode_default(self) -> None:
+        """A value carried on the pipeline (settings/env) overrides the mode-aware
+        default — including forcing 0.0 on vad mode, since 0.0 is not None."""
+        pipeline = self._fake_pipeline(min_endpointing_delay=0.2)
+        pipeline.turn_detection = "vad"  # mode default would be 0.5
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)
+        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.2
+
+        pipeline = self._fake_pipeline(min_endpointing_delay=0.0)
+        pipeline.turn_detection = "vad"
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline)
+        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.0
+
+    def test_explicit_min_endpointing_delay_overrides_pipeline(self) -> None:
+        """Explicit arg beats both the pipeline value and the mode-aware default."""
+        pipeline = self._fake_pipeline(min_endpointing_delay=0.2)
+        pipeline.turn_detection = "vad"
+        with patch("voice_agent_core.runtime.AgentSession") as agent_session_cls:
+            build_session(pipeline, min_endpointing_delay=0.9)
+        assert agent_session_cls.call_args.kwargs["min_endpointing_delay"] == 0.9
 
     def test_extra_kwargs_passed_through(self) -> None:
         pipeline = self._fake_pipeline()

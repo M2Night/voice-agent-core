@@ -71,6 +71,21 @@ class TestBuildPipeline:
         pipeline = build_pipeline(BaseAgentSettings(), vad=object())
         assert pipeline.preemptive_generation is False
 
+    def test_min_endpointing_delay_defaults_none_on_pipeline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_required_env(monkeypatch)
+        pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+        assert pipeline.min_endpointing_delay is None
+
+    def test_min_endpointing_delay_env_carried_to_pipeline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _set_required_env(monkeypatch)
+        monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0.25")
+        pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+        assert pipeline.min_endpointing_delay == 0.25
+
     def test_propagates_fish_key_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
