@@ -87,8 +87,8 @@ class TestBaseAgentSettings:
         assert s.llm_provider == "openrouter"
         assert s.llm_model == "anthropic/claude-sonnet-4-6"
         assert s.tts_model == "s2-pro"
+        assert s.fish_tts_latency_mode == "balanced"
         assert s.turn_detection_mode == "multilingual"
-        assert s.tts_latency_mode == "balanced"
         assert s.preemptive_generation is True
         assert s.min_endpointing_delay is None
         assert s.log_level == "INFO"
@@ -98,6 +98,7 @@ class TestBaseAgentSettings:
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LIVEKIT_URL", "wss://test.livekit.cloud")
         monkeypatch.setenv("TTS_VOICE_ID", "voice-123")
+        monkeypatch.setenv("FISH_TTS_LATENCY_MODE", "low")
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
         monkeypatch.setenv("STT_STREAM_ADAPT", "true")
         monkeypatch.setenv("PREEMPTIVE_GENERATION", "false")
@@ -106,10 +107,23 @@ class TestBaseAgentSettings:
         s = BaseAgentSettings()
         assert s.livekit_url == "wss://test.livekit.cloud"
         assert s.tts_voice_id == "voice-123"
+        assert s.fish_tts_latency_mode == "low"
         assert s.llm_provider == "openrouter"
         assert s.stt_stream_adapt is True
         assert s.preemptive_generation is False
         assert s.min_endpointing_delay == 0.3
+
+    def test_legacy_tts_latency_mode_is_ignored(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The former generic TTS latency env var was renamed to the Fish-specific
+        # FISH_TTS_LATENCY_MODE; the old name is intentionally ignored by
+        # BaseSettings(extra="ignore") rather than kept as a fallback.
+        legacy_name = "TTS_" + "LATENCY_MODE"
+        monkeypatch.setenv(legacy_name, "low")
+
+        s = BaseAgentSettings()
+        assert s.fish_tts_latency_mode == "balanced"
 
     def test_min_endpointing_delay_rejects_negative(
         self, monkeypatch: pytest.MonkeyPatch
@@ -127,4 +141,3 @@ class TestBaseAgentSettings:
         monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0")
         s = BaseAgentSettings()
         assert s.min_endpointing_delay == 0.0
-

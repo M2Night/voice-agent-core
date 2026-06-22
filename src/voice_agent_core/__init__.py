@@ -15,10 +15,10 @@ Public API re-exported here for convenience::
 
 from voice_agent_core.config import (
     BaseAgentSettings,
+    FishTTSLatencyMode,
     LogFormat,
     LogLevel,
     OTelExporter,
-    TTSLatencyMode,
     load_env_walking_up,
     load_yaml,
 )
@@ -77,6 +77,7 @@ __all__ = [
     "BaseAgentSettings",
     "FishSTT",
     "FishTTS",
+    "FishTTSLatencyMode",
     "LLMProvider",
     "LogFormat",
     "LogLevel",
@@ -88,7 +89,6 @@ __all__ = [
     "STTProvider",
     "SlackNotifier",
     "StreamAdapter",
-    "TTSLatencyMode",
     "TTSProvider",
     "__version__",
     "build_deepgram_stt",

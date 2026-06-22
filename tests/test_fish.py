@@ -27,6 +27,15 @@ class TestBuildFishTTS:
         assert tts.model == "s2-pro"
         assert tts.latency_mode == "balanced"
 
+    def test_fish_latency_mode_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("FISH_TTS_LATENCY_MODE", "low")
+        s = BaseAgentSettings()
+        tts = build_fish_tts(s)
+        assert tts.latency_mode == "low"
+
     def test_voice_id_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
         monkeypatch.setenv("TTS_VOICE_ID", "voice-abc")

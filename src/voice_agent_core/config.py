@@ -20,7 +20,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogFormat = Literal["json", "console"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
-TTSLatencyMode = Literal["normal", "balanced", "low"]
+FishTTSLatencyMode = Literal["normal", "balanced", "low"]
 """Fish Audio TTS latency mode (matches fishaudio plugin enum).
 
 - ``low``: lowest latency, may trade quality
@@ -77,6 +77,12 @@ class BaseAgentSettings(BaseSettings):
         description="Deepgram API key (only used when stt_provider=deepgram)",
     )
 
+    # --- Fish provider config ---
+    fish_tts_latency_mode: FishTTSLatencyMode = Field(
+        default="balanced",
+        description="Fish TTS latency/quality tradeoff (low | balanced | normal)",
+    )
+
     # --- STT (provider → model) ---
     stt_provider: str = Field(
         default="fish",
@@ -115,10 +121,6 @@ class BaseAgentSettings(BaseSettings):
     tts_voice_id: str = Field(
         default="",
         description="TTS voice id ('' = provider default voice)",
-    )
-    tts_latency_mode: TTSLatencyMode = Field(
-        default="balanced",
-        description="TTS latency/quality tradeoff (Fish: low | balanced | normal)",
     )
 
     # --- LLM (provider → model) ---
@@ -230,10 +232,10 @@ def load_env_walking_up(
 
 __all__ = [
     "BaseAgentSettings",
+    "FishTTSLatencyMode",
     "LogFormat",
     "LogLevel",
     "OTelExporter",
-    "TTSLatencyMode",
     "TurnDetectionMode",
     "load_env_walking_up",
     "load_yaml",

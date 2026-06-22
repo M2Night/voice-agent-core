@@ -271,7 +271,7 @@ def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     """Construct an instrumented Fish TTS from a settings object.
 
     Required env: ``FISH_API_KEY``. Optional: ``TTS_VOICE_ID``, ``TTS_MODEL``,
-    ``TTS_LATENCY_MODE``.
+    ``FISH_TTS_LATENCY_MODE``.
     """
     if not settings.fish_api_key:
         raise ValueError("FISH_API_KEY is required to build Fish TTS")
@@ -279,7 +279,7 @@ def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     kwargs: dict[str, Any] = {
         "api_key": settings.fish_api_key,
         "model": settings.tts_model,
-        "latency_mode": settings.tts_latency_mode,
+        "latency_mode": settings.fish_tts_latency_mode,
     }
     if settings.tts_voice_id:
         kwargs["voice_id"] = settings.tts_voice_id
