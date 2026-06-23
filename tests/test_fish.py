@@ -49,16 +49,23 @@ class TestBuildFishTTS:
         assert tts._min_chunk_length == 20
         assert tts._onset_fade_ms == 8
 
-    def test_impl_override_to_plugin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_optimizations_are_hardcoded_not_env_overridable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # pcm / native / onset-fade / min-chunk-length are hardcoded optimizations —
+        # stray FISH_TTS_* env must NOT change them (only FISH_TTS_LATENCY_MODE is a knob).
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("FISH_TTS_OUTPUT_FORMAT", "wav")
         monkeypatch.setenv("FISH_TTS_IMPL", "plugin")
         monkeypatch.setenv("FISH_TTS_MIN_CHUNK_LENGTH", "40")
-        monkeypatch.setenv("FISH_TTS_ONSET_FADE_MS", "8")
-        s = BaseAgentSettings()
-        tts = build_fish_tts(s)
-        assert tts._impl == "plugin"
-        assert tts._min_chunk_length == 40
+        monkeypatch.setenv("FISH_TTS_ONSET_FADE_MS", "0")
+        monkeypatch.setenv("FISH_TTS_SAMPLE_RATE", "44100")
+        tts = build_fish_tts(BaseAgentSettings())
+        assert tts.output_format == "pcm"
+        assert tts._impl == "native"
+        assert tts._min_chunk_length == 20
         assert tts._onset_fade_ms == 8
+        assert tts.sample_rate == 24000
 
     def test_native_start_request_adds_min_chunk_length(
         self, monkeypatch: pytest.MonkeyPatch
@@ -82,29 +89,9 @@ class TestBuildFishTTS:
         tts = build_fish_tts(s)
         assert tts.latency_mode == "low"
 
-    def test_fish_output_format_revert_to_wav(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The pcm default must stay overridable back to the upstream wav format.
+    def test_voice_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
-        monkeypatch.setenv("FISH_TTS_OUTPUT_FORMAT", "wav")
-        s = BaseAgentSettings()
-        tts = build_fish_tts(s)
-        assert tts.output_format == "wav"
-
-    def test_fish_sample_rate_override(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("FISH_API_KEY", "test-key")
-        monkeypatch.setenv("FISH_TTS_SAMPLE_RATE", "44100")
-        s = BaseAgentSettings()
-        tts = build_fish_tts(s)
-        assert tts.output_format == "pcm"
-        assert tts.sample_rate == 44100
-
-    def test_voice_id_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FISH_API_KEY", "test-key")
-        monkeypatch.setenv("TTS_VOICE_ID", "voice-abc")
+        monkeypatch.setenv("TTS_VOICE", "voice-abc")
         s = BaseAgentSettings()
         tts = build_fish_tts(s)
         assert tts.voice_id == "voice-abc"

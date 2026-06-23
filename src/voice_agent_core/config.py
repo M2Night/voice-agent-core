@@ -20,30 +20,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogFormat = Literal["json", "console"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
-FishTTSLatencyMode = Literal["normal", "balanced", "low"]
-"""Fish Audio TTS latency mode (matches fishaudio plugin enum).
-
-- ``low``: lowest latency, may trade quality
-- ``balanced``: default tradeoff
-- ``normal``: standard latency, highest quality
-"""
-FishTTSOutputFormat = Literal["wav", "pcm", "mp3", "opus"]
-"""Fish Audio TTS wire format. ``pcm`` (raw, default) is decoded by LiveKit's
-AudioEmitter as a passthrough; ``wav``/``mp3``/``opus`` route through a per-segment
-container decoder whose start-up transient can produce an audible first-phoneme click."""
-FishTTSImpl = Literal["native", "plugin"]
-"""Which Fish TTS streaming implementation to use.
-
-- ``native`` (default): voice-agent-core's own streaming path — sends clause-buffered
-  text to Fish *without* a per-clause flush, letting Fish chunk by
-  ``chunk_length``/``min_chunk_length`` instead of synthesizing one burst per sentence.
-  (Text is still clause-buffered by ``_InstrumentedStream`` upstream; the change is
-  dropping the per-sentence flush.) Avoids the per-sentence audio bursts that starve
-  LiveKit's audio emitter (``flush audio emitter due to slow audio generation``) and
-  the boundary clicks they cause.
-- ``plugin``: the upstream ``livekit-plugins-fishaudio`` streaming path (per-sentence
-  flush). Kept as a fallback / for A-B comparison.
-"""
 OTelExporter = Literal["console", "none"]
 TurnDetectionMode = Literal["multilingual", "vad", "stt"]
 """How to detect end-of-user-turn.
@@ -81,81 +57,20 @@ class BaseAgentSettings(BaseSettings):
     livekit_api_key: str = Field(default="", description="LiveKit API key")
     livekit_api_secret: str = Field(default="", description="LiveKit API secret")
 
-    # --- Provider credentials (secrets) ---
-    # Kept separate from provider/model selection: secrets live here, the
-    # "which provider / which model" knobs live in the per-layer sections below.
-    fish_api_key: str = Field(default="", description="Fish Audio API key (STT + TTS)")
-    openrouter_api_key: str = Field(
-        default="",
-        description="OpenRouter API key (used when llm_provider=openrouter)",
-    )
-    deepgram_api_key: str = Field(
-        default="",
-        description="Deepgram API key (required by default — stt_provider defaults to 'deepgram')",
-    )
+    # NOTE: provider credentials (FISH_API_KEY, DEEPGRAM_API_KEY, OPENROUTER_API_KEY)
+    # and provider-specific knobs live with their provider, not here — see
+    # voice_agent_core.fish.settings.FishSettings etc. This keeps BaseAgentSettings
+    # brand-agnostic: only generic selection (provider/model/voice/language) +
+    # provider-independent behavior live below.
 
-    # --- Fish provider config ---
-    fish_tts_latency_mode: FishTTSLatencyMode = Field(
-        default="balanced",
-        description="Fish TTS latency/quality tradeoff (low | balanced | normal)",
-    )
-    fish_tts_output_format: FishTTSOutputFormat = Field(
-        default="pcm",
-        description=(
-            "Fish TTS output format (wav | pcm | mp3 | opus). Defaults to 'pcm' to mitigate "
-            "the first-phoneme click/crackle: LiveKit passes raw pcm straight through, "
-            "while wav/mp3/opus go through a container decoder whose per-segment start-up "
-            "transient is audible at the start of each utterance. Set 'wav' to revert to "
-            "the upstream plugin default."
-        ),
-    )
-    fish_tts_sample_rate: int | None = Field(
-        default=None,
-        gt=0,
-        description=(
-            "Optional Fish TTS sample rate in Hz. None keeps the Fish plugin per-format "
-            "default (pcm/wav 24000, opus 48000, mp3 32000)."
-        ),
-    )
-    fish_tts_impl: FishTTSImpl = Field(
-        default="native",
-        description=(
-            "Fish TTS streaming implementation: 'native' (default, clause-buffered "
-            "streaming without per-sentence Fish flush — smoother audio) or 'plugin' "
-            "(upstream livekit-plugins-fishaudio, per-sentence flush). See FishTTSImpl."
-        ),
-    )
-    fish_tts_min_chunk_length: int = Field(
-        default=20,
-        ge=0,
-        le=100,
-        description=(
-            "Fish TTS min_chunk_length (chars, 0-100) for the native impl: the smallest "
-            "text unit Fish will synthesize, so it emits larger audio chunks rather than "
-            "tiny bursts. Ignored by the 'plugin' impl (upstream doesn't send it)."
-        ),
-    )
-    fish_tts_onset_fade_ms: int = Field(
-        default=8,
-        ge=0,
-        le=50,
-        description=(
-            "Linear fade-in (milliseconds) applied to the first audio of each TTS segment "
-            "to declick abrupt onsets (Fish sometimes starts a segment at full amplitude). "
-            "Default 8 ms removes the click without audibly softening the attack and adds no "
-            "latency (it only scales already-arrived samples); set 0 to disable. Applied to "
-            "the decoded PCM frames, independent of wire format."
-        ),
-    )
-
-    # --- STT (provider → model) ---
+    # --- STT (provider → model → language) ---
     stt_provider: str = Field(
         default="deepgram",
         description=(
             "STT provider name; must be registered in providers.py. Defaults to "
-            "'deepgram' (native streaming, low transcription latency); requires "
-            "DEEPGRAM_API_KEY. Set 'fish' for Fish batch ASR (no extra key, higher "
-            "latency — pair with STT_STREAM_ADAPT=true to soften it)."
+            "'deepgram' (native streaming, low transcription latency; requires "
+            "DEEPGRAM_API_KEY). Set 'fish' for Fish batch ASR — non-streaming providers "
+            "are automatically wrapped with a VAD StreamAdapter."
         ),
     )
     stt_model: str = Field(
@@ -168,14 +83,6 @@ class BaseAgentSettings(BaseSettings):
             "Provider-specific STT language hint. 'auto' uses provider-specific "
             "behavior and is supported by Fish; Deepgram streaming requires an "
             "explicit value such as 'en' or 'multi'."
-        ),
-    )
-    stt_stream_adapt: bool = Field(
-        default=False,
-        description=(
-            "Wrap non-streaming STT providers with a VAD-based StreamAdapter. Useful "
-            "for testing lower-latency Fish batch ASR behavior; native streaming "
-            "providers such as Deepgram are left unchanged."
         ),
     )
 
@@ -192,9 +99,13 @@ class BaseAgentSettings(BaseSettings):
             "before switching."
         ),
     )
-    tts_voice_id: str = Field(
+    tts_voice: str = Field(
         default="",
-        description="TTS voice id ('' = provider default voice)",
+        description=(
+            "Voice selection for the chosen TTS provider ('' = provider default). "
+            "Provider-defined value space (Fish: reference/voice id; OpenAI TTS: a named "
+            "voice; etc.)."
+        ),
     )
 
     # --- LLM (provider → model) ---
@@ -306,7 +217,6 @@ def load_env_walking_up(
 
 __all__ = [
     "BaseAgentSettings",
-    "FishTTSLatencyMode",
     "LogFormat",
     "LogLevel",
     "OTelExporter",

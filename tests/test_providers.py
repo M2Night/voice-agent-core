@@ -137,3 +137,50 @@ class TestRegistryExtensibility:
 def test_llmprovider_models_default_free_form() -> None:
     p = LLMProvider(name="x", build=lambda s: object())
     assert p.models == ()
+
+
+class TestProviderSettings:
+    """Provider-specific config lives on provider settings classes (env-prefixed),
+    not on BaseAgentSettings — env names preserved."""
+
+    def test_fish_settings_read_prefixed_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from voice_agent_core import FishSettings
+
+        monkeypatch.setenv("FISH_API_KEY", "k")
+        monkeypatch.setenv("FISH_TTS_LATENCY_MODE", "low")
+        f = FishSettings()
+        assert f.api_key == "k"
+        assert f.tts_latency_mode == "low"
+
+    def test_deepgram_openrouter_keys_read_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from voice_agent_core import DeepgramSettings, OpenRouterSettings
+
+        monkeypatch.setenv("DEEPGRAM_API_KEY", "dg")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "or")
+        assert DeepgramSettings().api_key == "dg"
+        assert OpenRouterSettings().api_key == "or"
+
+    def test_provider_config_schema(self) -> None:
+        # Fish exposes a provider-specific config schema (for a frontend's Fish section).
+        schema = providers.provider_config_schema("tts", "fish")
+        assert schema is not None
+        assert "tts_latency_mode" in schema["properties"]
+        # livekit LLM has no provider-specific settings.
+        assert providers.provider_config_schema("llm", "livekit") is None
+
+    def test_provider_config_schema_unknown_layer_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown layer"):
+            providers.provider_config_schema("nope", "fish")
+
+
+def test_openrouter_without_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    from voice_agent_core.providers import build_llm
+
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        build_llm(BaseAgentSettings())

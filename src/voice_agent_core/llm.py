@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from livekit.agents import llm as agents_llm
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent_core.observability import get_logger
 
@@ -24,6 +25,23 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _OPENROUTER_APP_NAME = "voice-agent-core"
+
+
+class OpenRouterSettings(BaseSettings):
+    """OpenRouter-provider config, env-driven with the ``OPENROUTER_`` prefix.
+
+    Provider-owned (read by ``build_openrouter_llm``) so the key isn't on the generic
+    ``BaseAgentSettings``. Env name preserved: ``OPENROUTER_API_KEY``.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="OPENROUTER_",
+        env_file=None,
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    api_key: str = ""
 
 
 def build_livekit_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
@@ -42,8 +60,9 @@ def build_livekit_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
 
 
 def build_openrouter_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
-    """Build an OpenRouter-backed LLM. Requires ``OPENROUTER_API_KEY``."""
-    if not settings.openrouter_api_key:
+    """Build an OpenRouter-backed LLM. ``OPENROUTER_API_KEY`` from ``OpenRouterSettings``."""
+    openrouter = OpenRouterSettings()
+    if not openrouter.api_key:
         raise ValueError("OPENROUTER_API_KEY is required when llm_provider=openrouter")
 
     from livekit.plugins import openai
@@ -51,9 +70,9 @@ def build_openrouter_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
     log.info("llm.build", provider="openrouter", model=settings.llm_model)
     return openai.LLM.with_openrouter(
         model=settings.llm_model,
-        api_key=settings.openrouter_api_key,
+        api_key=openrouter.api_key,
         app_name=_OPENROUTER_APP_NAME,
     )
 
 
-__all__ = ["build_livekit_llm", "build_openrouter_llm"]
+__all__ = ["OpenRouterSettings", "build_livekit_llm", "build_openrouter_llm"]

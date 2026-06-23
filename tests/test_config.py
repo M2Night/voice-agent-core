@@ -94,15 +94,17 @@ class TestBaseAgentSettings:
         s = BaseAgentSettings()
         assert s.stt_provider == "deepgram"
         assert s.stt_language == "en"
-        assert s.stt_stream_adapt is False
         assert s.tts_provider == "fish"
         assert s.llm_provider == "openrouter"
         assert s.llm_model == "openai/gpt-5.4-mini"
         assert s.tts_model == "s2-pro"
-        assert s.fish_tts_latency_mode == "balanced"
-        assert s.fish_tts_impl == "native"
-        assert s.fish_tts_min_chunk_length == 20
-        assert s.fish_tts_onset_fade_ms == 8
+        assert s.tts_voice == ""
+        # Provider-specific knobs (fish_tts_*) + credentials moved off BaseAgentSettings
+        # to provider settings classes (FishSettings/DeepgramSettings/OpenRouterSettings;
+        # covered in test_providers).
+        assert not hasattr(s, "fish_tts_latency_mode")
+        assert not hasattr(s, "fish_api_key")
+        assert not hasattr(s, "stt_stream_adapt")
         assert s.turn_detection_mode == "multilingual"
         assert s.preemptive_generation is True
         assert s.min_endpointing_delay is None
@@ -112,33 +114,17 @@ class TestBaseAgentSettings:
 
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LIVEKIT_URL", "wss://test.livekit.cloud")
-        monkeypatch.setenv("TTS_VOICE_ID", "voice-123")
-        monkeypatch.setenv("FISH_TTS_LATENCY_MODE", "low")
+        monkeypatch.setenv("TTS_VOICE", "voice-123")
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
-        monkeypatch.setenv("STT_STREAM_ADAPT", "true")
         monkeypatch.setenv("PREEMPTIVE_GENERATION", "false")
         monkeypatch.setenv("MIN_ENDPOINTING_DELAY", "0.3")
 
         s = BaseAgentSettings()
         assert s.livekit_url == "wss://test.livekit.cloud"
-        assert s.tts_voice_id == "voice-123"
-        assert s.fish_tts_latency_mode == "low"
+        assert s.tts_voice == "voice-123"
         assert s.llm_provider == "openrouter"
-        assert s.stt_stream_adapt is True
         assert s.preemptive_generation is False
         assert s.min_endpointing_delay == 0.3
-
-    def test_legacy_tts_latency_mode_is_ignored(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The former generic TTS latency env var was renamed to the Fish-specific
-        # FISH_TTS_LATENCY_MODE; the old name is intentionally ignored by
-        # BaseSettings(extra="ignore") rather than kept as a fallback.
-        legacy_name = "TTS_" + "LATENCY_MODE"
-        monkeypatch.setenv(legacy_name, "low")
-
-        s = BaseAgentSettings()
-        assert s.fish_tts_latency_mode == "balanced"
 
     def test_min_endpointing_delay_rejects_negative(
         self, monkeypatch: pytest.MonkeyPatch

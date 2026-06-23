@@ -73,6 +73,7 @@ def build_pipeline(
     vad: silero.VAD | None = None,
     stream_adapter_vad: silero.VAD | None = None,
     turn_detection: str | MultilingualModel | None = None,
+    stream_adapt: bool | None = None,
 ) -> PipelineComponents:
     """Assemble a LiveKit voice pipeline from settings.
 
@@ -81,6 +82,11 @@ def build_pipeline(
     constructed later in ``build_session``. Pass ``vad=`` a prewarmed instance in
     production; pass ``stream_adapter_vad=`` to give the batch-STT adapter a
     dedicated VAD instance; pass ``turn_detection=`` to inject your own detector.
+
+    Stream adaptation is **automatic**: a non-streaming STT (e.g. Fish batch ASR) is
+    wrapped in a VAD-based ``StreamAdapter`` so it presents a streaming interface;
+    natively-streaming STT (Deepgram) is used as-is. Pass ``stream_adapt=True/False`` to
+    force it on/off (default ``None`` = auto by capability).
     """
     log.info(
         "pipeline.build_start",
@@ -88,14 +94,15 @@ def build_pipeline(
         tts_provider=settings.tts_provider,
         llm_provider=settings.llm_provider,
         turn_detection_mode=settings.turn_detection_mode,
-        stt_stream_adapt=settings.stt_stream_adapt,
         preemptive_generation=settings.preemptive_generation,
         min_endpointing_delay=settings.min_endpointing_delay,
     )
 
     stt = build_stt(settings)
     pipeline_vad = vad if vad is not None else silero.VAD.load()
-    if settings.stt_stream_adapt:
+    # Auto: wrap non-streaming STT; explicit stream_adapt overrides the capability check.
+    should_adapt = (not stt.capabilities.streaming) if stream_adapt is None else stream_adapt
+    if should_adapt:
         if stt.capabilities.streaming:
             log.info(
                 "stt.stream_adapter_skipped",

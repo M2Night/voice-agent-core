@@ -9,15 +9,21 @@ Subclasses ``livekit.plugins.fishaudio.TTS`` and adds:
 - **Sentence-boundary buffering** — accumulates LLM-streamed tokens until a
   punctuation mark, then pushes the complete clause to the Fish TTS stream.
   Reduces "chunk boundary in the middle of a word" artifacts.
-- **Native streaming impl** (``FISH_TTS_IMPL=native``, default) — drops the upstream
-  plugin's per-sentence flush and lets Fish chunk by ``chunk_length``/``min_chunk_length``.
-  This removes the per-sentence audio bursts that starve LiveKit's audio emitter
-  ("flush audio emitter due to slow audio generation") and the boundary clicks they
-  produce. (Text still goes through ``_InstrumentedStream`` sentence buffering first, so
-  Fish receives clauses — the change is that we don't *flush* between them.)
-  ``FISH_TTS_IMPL=plugin`` falls back to the upstream behavior for A-B comparison.
-- **Onset fade-in** (``FISH_TTS_ONSET_FADE_MS``) — optional short linear fade on the
-  first audio of each segment to declick abrupt onsets.
+- **Native streaming impl** — drops the upstream plugin's per-sentence flush and lets
+  Fish chunk by ``chunk_length``/``min_chunk_length``, removing the per-sentence audio
+  bursts that starve LiveKit's audio emitter ("flush audio emitter due to slow audio
+  generation") and the boundary clicks they produce. (Text still goes through
+  ``_InstrumentedStream`` sentence buffering first, so Fish receives clauses — the change
+  is that we don't *flush* between them.)
+- **Onset fade-in** — a short linear fade on the first audio of each segment to declick
+  abrupt onsets.
+
+Policy vs mechanism: :func:`build_fish_tts` fixes the optimization policy — pcm output,
+``impl="native"``, ``min_chunk_length=20``, ``onset_fade_ms=8`` (hardcoded module
+constants; not env-configurable). The ``FishTTS`` constructor still accepts these as
+kwargs so the mechanism stays available for tests / direct construction; only
+``FISH_API_KEY`` and ``FISH_TTS_LATENCY_MODE`` are env knobs (see
+``voice_agent_core.fish.settings.FishSettings``).
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ from livekit.plugins import fishaudio
 from livekit.plugins.fishaudio.tts import SynthesizeStream as _UpstreamFishStream
 from livekit.plugins.fishaudio.tts import _build_tts_request
 
+from voice_agent_core.fish.settings import FishSettings
 from voice_agent_core.observability import MetricNames, get_logger, get_meter
 
 if TYPE_CHECKING:
@@ -507,29 +514,40 @@ def _fade_pcm_bytes(data: bytes, fade_total: int, fade_done: int) -> tuple[bytes
     return samples.tobytes(), done
 
 
+# Hardcoded Fish TTS optimizations (validated; no per-scenario tradeoff, so not
+# env-configurable — see fish/settings.py). pcm avoids the first-phoneme decoder click;
+# native streaming drops the per-sentence flush; 8 ms onset fade declicks abrupt starts;
+# min_chunk_length 20 keeps Fish emitting continuous chunks. Sample rate is left at the
+# Fish plugin per-format default (pcm = 24 kHz; LiveKit resamples to the pipeline rate).
+_OUTPUT_FORMAT = "pcm"
+_IMPL = "native"
+_MIN_CHUNK_LENGTH = 20
+_ONSET_FADE_MS = 8
+
+
 def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     """Construct an instrumented Fish TTS from a settings object.
 
-    Required env: ``FISH_API_KEY``. Optional: ``TTS_VOICE_ID``, ``TTS_MODEL``,
-    ``FISH_TTS_LATENCY_MODE``, ``FISH_TTS_OUTPUT_FORMAT``, ``FISH_TTS_SAMPLE_RATE``,
-    ``FISH_TTS_IMPL``, ``FISH_TTS_MIN_CHUNK_LENGTH``, ``FISH_TTS_ONSET_FADE_MS``.
+    Generic model/voice come from ``settings`` (``TTS_MODEL`` / ``TTS_VOICE``); the Fish
+    API key and latency mode from :class:`~voice_agent_core.fish.settings.FishSettings`
+    (``FISH_API_KEY`` / ``FISH_TTS_LATENCY_MODE``). The remaining Fish TTS behavior is a
+    hardcoded optimization (see the module constants above).
     """
-    if not settings.fish_api_key:
+    fish = FishSettings()
+    if not fish.api_key:
         raise ValueError("FISH_API_KEY is required to build Fish TTS")
 
     kwargs: dict[str, Any] = {
-        "api_key": settings.fish_api_key,
+        "api_key": fish.api_key,
         "model": settings.tts_model,
-        "latency_mode": settings.fish_tts_latency_mode,
-        "output_format": settings.fish_tts_output_format,
-        "impl": settings.fish_tts_impl,
-        "min_chunk_length": settings.fish_tts_min_chunk_length,
-        "onset_fade_ms": settings.fish_tts_onset_fade_ms,
+        "latency_mode": fish.tts_latency_mode,
+        "output_format": _OUTPUT_FORMAT,
+        "impl": _IMPL,
+        "min_chunk_length": _MIN_CHUNK_LENGTH,
+        "onset_fade_ms": _ONSET_FADE_MS,
     }
-    if settings.tts_voice_id:
-        kwargs["voice_id"] = settings.tts_voice_id
-    if settings.fish_tts_sample_rate is not None:
-        kwargs["sample_rate"] = settings.fish_tts_sample_rate
+    if settings.tts_voice:
+        kwargs["voice_id"] = settings.tts_voice
 
     return FishTTS(**kwargs)
 

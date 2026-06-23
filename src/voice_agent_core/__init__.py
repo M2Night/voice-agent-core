@@ -15,15 +15,22 @@ Public API re-exported here for convenience::
 
 from voice_agent_core.config import (
     BaseAgentSettings,
-    FishTTSLatencyMode,
     LogFormat,
     LogLevel,
     OTelExporter,
     load_env_walking_up,
     load_yaml,
 )
-from voice_agent_core.deepgram import build_deepgram_stt
-from voice_agent_core.fish import FishSTT, FishTTS, build_fish_stt, build_fish_tts
+from voice_agent_core.deepgram import DeepgramSettings, build_deepgram_stt
+from voice_agent_core.fish import (
+    FishSettings,
+    FishSTT,
+    FishTTS,
+    FishTTSLatencyMode,
+    build_fish_stt,
+    build_fish_tts,
+)
+from voice_agent_core.llm import OpenRouterSettings
 from voice_agent_core.notify import (
     NotificationField,
     NotificationPayload,
@@ -50,6 +57,7 @@ from voice_agent_core.providers import (
     list_stt_providers,
     list_tts_providers,
     llm_models,
+    provider_config_schema,
     register_llm,
     register_stt,
     register_tts,
@@ -75,7 +83,9 @@ __version__ = "0.2.1"
 __all__ = [
     "DEFAULT_SUMMARY_INSTRUCTION",
     "BaseAgentSettings",
+    "DeepgramSettings",
     "FishSTT",
+    "FishSettings",
     "FishTTS",
     "FishTTSLatencyMode",
     "LLMProvider",
@@ -85,6 +95,7 @@ __all__ = [
     "NotificationField",
     "NotificationPayload",
     "OTelExporter",
+    "OpenRouterSettings",
     "PipelineComponents",
     "STTProvider",
     "SlackNotifier",
@@ -113,6 +124,7 @@ __all__ = [
     "llm_models",
     "load_env_walking_up",
     "load_yaml",
+    "provider_config_schema",
     "register_llm",
     "register_stt",
     "register_tts",

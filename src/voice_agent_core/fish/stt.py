@@ -34,6 +34,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from voice_agent_core.fish.settings import FishSettings
 from voice_agent_core.observability import MetricNames, get_logger, get_meter
 
 if TYPE_CHECKING:
@@ -241,11 +242,16 @@ class FishSTT(stt.STT):
 
 
 def build_fish_stt(settings: BaseAgentSettings) -> FishSTT:
-    """Construct an instrumented Fish STT from a settings object."""
-    if not settings.fish_api_key:
+    """Construct an instrumented Fish STT from a settings object.
+
+    ``FISH_API_KEY`` comes from :class:`~voice_agent_core.fish.settings.FishSettings`;
+    the language hint stays generic (``STT_LANGUAGE``).
+    """
+    fish = FishSettings()
+    if not fish.api_key:
         raise ValueError("FISH_API_KEY is required to build Fish STT")
     return FishSTT(
-        api_key=settings.fish_api_key,
+        api_key=fish.api_key,
         language=settings.stt_language,
     )
 

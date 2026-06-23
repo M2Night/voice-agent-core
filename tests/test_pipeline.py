@@ -122,10 +122,9 @@ class TestBuildPipeline:
         pipeline = build_pipeline(BaseAgentSettings(), vad=object())
         assert pipeline.min_endpointing_delay == 0.25
 
-    def test_stt_stream_adapt_defaults_false_no_wrap(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fake_stt = _FakeSTT(streaming=False)
+    def test_streaming_stt_not_wrapped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Auto: a natively-streaming STT (e.g. Deepgram) is used as-is.
+        fake_stt = _FakeSTT(streaming=True)
         with (
             patch("voice_agent_core.pipeline.build_stt", return_value=fake_stt),
             patch("voice_agent_core.pipeline.build_tts", return_value=object()),
@@ -135,10 +134,10 @@ class TestBuildPipeline:
 
         assert pipeline.stt is fake_stt
 
-    def test_stt_stream_adapt_wraps_non_streaming_stt(
+    def test_non_streaming_stt_auto_wrapped(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("STT_STREAM_ADAPT", "true")
+        # Auto: a non-streaming STT (Fish batch) is wrapped in a StreamAdapter — no flag.
         fake_stt = _FakeSTT(streaming=False)
         fake_vad = object()
         stream_adapter_vad = object()
@@ -160,18 +159,19 @@ class TestBuildPipeline:
         assert pipeline.stt.capabilities.streaming is True
         assert pipeline.vad is fake_vad
 
-    def test_stt_stream_adapt_skips_streaming_stt(
+    def test_stream_adapt_override_false_skips_wrap(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("STT_STREAM_ADAPT", "true")
-        fake_stt = _FakeSTT(streaming=True)
-
+        # Explicit stream_adapt=False forces no wrap even for a non-streaming STT.
+        fake_stt = _FakeSTT(streaming=False)
         with (
             patch("voice_agent_core.pipeline.build_stt", return_value=fake_stt),
             patch("voice_agent_core.pipeline.build_tts", return_value=object()),
             patch("voice_agent_core.pipeline.build_llm", return_value=object()),
         ):
-            pipeline = build_pipeline(BaseAgentSettings(), vad=object())
+            pipeline = build_pipeline(
+                BaseAgentSettings(), vad=object(), stream_adapt=False
+            )
 
         assert pipeline.stt is fake_stt
 

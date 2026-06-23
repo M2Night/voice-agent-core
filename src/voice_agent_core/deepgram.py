@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from livekit.agents import stt as agents_stt
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent_core.observability import get_logger
 
@@ -28,15 +29,33 @@ _DEFAULT_MODEL = "nova-3"
 _DEFAULT_LANGUAGE = "en"
 
 
+class DeepgramSettings(BaseSettings):
+    """Deepgram-provider config, env-driven with the ``DEEPGRAM_`` prefix.
+
+    Provider-owned (read by ``build_deepgram_stt``) so the Deepgram key isn't on the
+    generic ``BaseAgentSettings``. Env name preserved: ``DEEPGRAM_API_KEY``.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="DEEPGRAM_",
+        env_file=None,
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    api_key: str = ""
+
+
 def build_deepgram_stt(settings: BaseAgentSettings) -> agents_stt.STT:
     """Construct a streaming Deepgram STT from a settings object.
 
     Reads ``stt_model`` (defaults to ``nova-3``) and ``stt_language``. Deepgram
     streaming needs an explicit language hint; the default is ``en`` for the common
     English smoke/dev path. Set ``stt_language=multi`` explicitly for Nova-3
-    multilingual/code-switching. Requires ``DEEPGRAM_API_KEY``.
+    multilingual/code-switching. ``DEEPGRAM_API_KEY`` comes from ``DeepgramSettings``.
     """
-    if not settings.deepgram_api_key:
+    deepgram_settings = DeepgramSettings()
+    if not deepgram_settings.api_key:
         raise ValueError("DEEPGRAM_API_KEY is required to build Deepgram STT")
 
     model = settings.stt_model or _DEFAULT_MODEL
@@ -59,8 +78,8 @@ def build_deepgram_stt(settings: BaseAgentSettings) -> agents_stt.STT:
     return deepgram.STT(
         model=model,
         language=language,
-        api_key=settings.deepgram_api_key,
+        api_key=deepgram_settings.api_key,
     )
 
 
-__all__ = ["build_deepgram_stt"]
+__all__ = ["DeepgramSettings", "build_deepgram_stt"]
