@@ -291,7 +291,7 @@ class _NativeFishStream(_UpstreamFishStream):
                         )
                     break
                 else:
-                    log.debug("fish_tts.native_unknown_event", event=event)
+                    log.debug("fish_tts.native_unknown_event", fish_event=event)
 
         tasks = [
             asyncio.create_task(send_task(), name="fish_native_send"),
