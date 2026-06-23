@@ -21,7 +21,7 @@ from voice_agent_core.observability import (
 
 class TestLogging:
     def test_configure_and_log_json(self, capsys: pytest.CaptureFixture[str]) -> None:
-        configure_logging(level="INFO", format="json")
+        configure_logging(level="INFO", log_format="json")
         log = get_logger("test")
         log.info("smoke_event", key="value", count=1)
         out = capsys.readouterr().out
@@ -29,7 +29,7 @@ class TestLogging:
         assert '"key"' in out and '"value"' in out
 
     def test_log_below_level_suppressed(self, capsys: pytest.CaptureFixture[str]) -> None:
-        configure_logging(level="WARNING", format="json")
+        configure_logging(level="WARNING", log_format="json")
         log = get_logger("test")
         log.debug("should_not_appear")
         log.info("should_not_appear_either")
@@ -37,7 +37,7 @@ class TestLogging:
         assert "should_not_appear" not in out
 
     def test_console_format(self, capsys: pytest.CaptureFixture[str]) -> None:
-        configure_logging(level="INFO", format="console")
+        configure_logging(level="INFO", log_format="console")
         log = get_logger("test")
         log.info("console_event")
         out = capsys.readouterr().out

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
-
-import pytest
 
 from voice_agent_core.transcript import (
     DEFAULT_SUMMARY_INSTRUCTION,

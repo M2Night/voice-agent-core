@@ -15,6 +15,7 @@ Call :func:`setup_observability` once at process startup. Use :func:`get_logger`
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 from typing import Any
@@ -36,11 +37,11 @@ from voice_agent_core.config import (
 )
 
 
-def configure_logging(level: LogLevel = "INFO", format: LogFormat = "json") -> None:
+def configure_logging(level: LogLevel = "INFO", log_format: LogFormat = "json") -> None:
     """Configure structlog. Idempotent — safe to call multiple times.
 
-    With ``format='json'`` each log line is a single JSON object suitable for any
-    log aggregator; timestamps are ISO 8601 UTC. With ``format='console'`` lines
+    With ``log_format='json'`` each log line is a single JSON object suitable for any
+    log aggregator; timestamps are ISO 8601 UTC. With ``log_format='console'`` lines
     are colorized and human-readable for local development; timestamps are
     ``HH:MM:SS.us`` local time so they align visually with LiveKit's own
     stdlib-logger formatter when both appear in the same terminal.
@@ -53,7 +54,7 @@ def configure_logging(level: LogLevel = "INFO", format: LogFormat = "json") -> N
 
     # Short local time for console (visually aligns with LiveKit's own logger);
     # ISO 8601 UTC for JSON (machine-friendly for log aggregators).
-    if format == "json":
+    if log_format == "json":
         timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
     else:
         timestamper = structlog.processors.TimeStamper(fmt="%H:%M:%S.%f", utc=False)
@@ -67,7 +68,7 @@ def configure_logging(level: LogLevel = "INFO", format: LogFormat = "json") -> N
     ]
 
     renderer: Any
-    if format == "json":
+    if log_format == "json":
         renderer = structlog.processors.JSONRenderer()
     else:
         renderer = structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty())
@@ -146,10 +147,9 @@ def shutdown_observability(timeout_ms: int = 5_000) -> None:
     """
     provider = metrics.get_meter_provider()
     if hasattr(provider, "shutdown"):
-        try:
+        # Best-effort: never crash on exit if the exporter is already torn down.
+        with contextlib.suppress(Exception):
             provider.shutdown(timeout_millis=timeout_ms)
-        except Exception:  # noqa: BLE001 — shutdown is best-effort; never crash on exit
-            pass
 
 
 def setup_observability(settings: BaseAgentSettings, service_name: str) -> None:
@@ -162,7 +162,7 @@ def setup_observability(settings: BaseAgentSettings, service_name: str) -> None:
         settings = MyAppSettings()
         setup_observability(settings, service_name="lead-qualification")
     """
-    configure_logging(level=settings.log_level, format=settings.log_format)
+    configure_logging(level=settings.log_level, log_format=settings.log_format)
     configure_metrics(
         service_name=service_name,
         exporter=settings.otel_metrics_exporter,
