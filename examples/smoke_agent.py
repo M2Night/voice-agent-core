@@ -79,8 +79,11 @@ server = AgentServer()
 # the worker). Stateless: sharing initial config across forks is safe.
 # Empty webhook_url triggers SlackNotifier's dev-log mode (no HTTP call).
 notifier = SlackNotifier(webhook_url=settings.slack_webhook_url)
-# default_prewarm loads silero VAD into proc.userdata["vad"]. Demos that need
-# extra prewarm work should wrap this: call default_prewarm(proc) first, then
+# default_prewarm loads the main silero VAD into proc.userdata["vad"]. This smoke
+# demo uses Deepgram (streaming STT), so it does NOT opt into the second
+# stream-adapter VAD; a Fish-batch-STT deployment would use
+# `lambda proc: default_prewarm(proc, stream_adapter_vad=True)` instead. Demos that
+# need extra prewarm work should wrap this: call default_prewarm(proc) first, then
 # stash whatever else on proc.userdata.
 server.setup_fnc = default_prewarm
 
@@ -109,7 +112,13 @@ async def entry(ctx: JobContext) -> None:
         log.info("session.warmup", room=ctx.room.name)
         return
 
-    pipeline = build_pipeline(settings, vad=ctx.proc.userdata["vad"])
+    pipeline = build_pipeline(
+        settings,
+        vad=ctx.proc.userdata["vad"],
+        # Only prewarmed when default_prewarm(stream_adapter_vad=True) was used
+        # (batch STT); None here on the Deepgram path, which build_pipeline ignores.
+        stream_adapter_vad=ctx.proc.userdata.get("stream_adapter_vad"),
+    )
     session_start = time.monotonic()
 
     # NB: voice_agent_core also exports `warm_tts(pipeline.tts)` for prewarming

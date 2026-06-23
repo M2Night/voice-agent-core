@@ -30,6 +30,7 @@ from voice_agent_core.fish import (
     build_fish_stt,
     build_fish_tts,
 )
+from voice_agent_core.idle import IdleWatcher, OnIdle, attach_idle_watcher
 from voice_agent_core.llm import OpenRouterSettings
 from voice_agent_core.notify import (
     NotificationField,
@@ -88,6 +89,7 @@ __all__ = [
     "FishSettings",
     "FishTTS",
     "FishTTSLatencyMode",
+    "IdleWatcher",
     "LLMProvider",
     "LogFormat",
     "LogLevel",
@@ -95,6 +97,7 @@ __all__ = [
     "NotificationField",
     "NotificationPayload",
     "OTelExporter",
+    "OnIdle",
     "OpenRouterSettings",
     "PipelineComponents",
     "STTProvider",
@@ -102,6 +105,7 @@ __all__ = [
     "StreamAdapter",
     "TTSProvider",
     "__version__",
+    "attach_idle_watcher",
     "build_deepgram_stt",
     "build_fish_stt",
     "build_fish_tts",

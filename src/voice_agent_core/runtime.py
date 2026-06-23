@@ -20,7 +20,13 @@ Typical demo entrypoint::
     async def entry(ctx):
         if is_warmup_session(ctx):
             return
-        pipeline = build_pipeline(settings, vad=ctx.proc.userdata["vad"])
+        pipeline = build_pipeline(
+            settings,
+            vad=ctx.proc.userdata["vad"],
+            # Only present when prewarmed with stream_adapter_vad=True (batch STT);
+            # None on the default streaming path, where build_pipeline ignores it.
+            stream_adapter_vad=ctx.proc.userdata.get("stream_adapter_vad"),
+        )
         session = build_session(pipeline)
         await session.start(
             agent=MyAgent(),
@@ -55,19 +61,62 @@ from voice_agent_core.pipeline import PipelineComponents
 
 log = get_logger(__name__)
 
+# Two silero VAD profiles, loaded once per worker (see default_prewarm). silero is
+# cheap to hold in memory, and the two roles want different tunings — so we prewarm
+# both rather than share one compromise instance.
+#
+# Main session VAD — drives interruption/barge-in detection (and end-of-turn in
+# `vad` turn mode). Slightly snappier than silero's stock defaults
+# (min_silence=0.55, prefix_padding=0.5): no prefix padding so a barge-in registers
+# the instant speech starts, and a marginally shorter silence window.
+_MAIN_VAD_OPTS: dict[str, float] = {
+    "min_silence_duration": 0.5,
+    "prefix_padding_duration": 0.0,
+    "min_speech_duration": 0.05,
+}
+# StreamAdapter VAD — only used when a *batch* STT (e.g. Fish ASR) is wrapped in a
+# StreamAdapter, where the VAD is what cuts audio into segments to send for
+# recognition. Tuned aggressively: a short silence window ends a segment fast (lower
+# STT latency), and prefix padding keeps the leading phoneme that the tighter window
+# would otherwise clip. Irrelevant to natively-streaming STT (Deepgram), which
+# bypasses the adapter — prewarmed anyway so a Fish-STT job has it ready.
+_STREAM_ADAPTER_VAD_OPTS: dict[str, float] = {
+    "min_silence_duration": 0.35,
+    "prefix_padding_duration": 0.35,
+    "min_speech_duration": 0.05,
+}
 
-def default_prewarm(proc: JobProcess) -> None:
-    """Load silero VAD once per worker process and stash it on ``proc.userdata``.
 
-    Demos that need additional prewarm work should compose with this rather
-    than replace it::
+def default_prewarm(proc: JobProcess, *, stream_adapter_vad: bool = False) -> None:
+    """Load the silero VAD profile(s) once per worker process onto ``proc.userdata``.
+
+    Always stashes ``proc.userdata["vad"]`` — the main session VAD (interruption /
+    end-of-turn), tuned via ``_MAIN_VAD_OPTS``.
+
+    With ``stream_adapter_vad=True`` also stashes
+    ``proc.userdata["stream_adapter_vad"]`` — a more aggressive second VAD
+    (``_STREAM_ADAPTER_VAD_OPTS``) for the batch-STT ``StreamAdapter`` segmenter,
+    which you then pass to ``build_pipeline(..., stream_adapter_vad=...)``.
+
+    It's **opt-in** because each ``silero.VAD.load()`` spins up its own ONNX
+    inference session (real CPU/memory at prewarm), and the default streaming-STT
+    path (Deepgram) bypasses the ``StreamAdapter`` entirely — so loading a second
+    VAD there is pure cost. Turn it on only for deployments using a batch STT
+    (e.g. Fish ASR)::
 
         def prewarm(proc):
-            default_prewarm(proc)
-            proc.userdata["custom_model"] = ...
+            default_prewarm(proc, stream_adapter_vad=True)  # using Fish batch STT
         server.setup_fnc = prewarm
+
+    Demos that need additional prewarm work compose the same way: call
+    ``default_prewarm(proc, ...)`` first, then stash whatever else on
+    ``proc.userdata``.
     """
-    proc.userdata["vad"] = silero.VAD.load()
+    proc.userdata["vad"] = silero.VAD.load(**_MAIN_VAD_OPTS)
+    if stream_adapter_vad:
+        proc.userdata["stream_adapter_vad"] = silero.VAD.load(
+            **_STREAM_ADAPTER_VAD_OPTS
+        )
 
 
 def is_warmup_session(ctx: JobContext) -> bool:

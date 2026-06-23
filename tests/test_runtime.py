@@ -41,15 +41,41 @@ class TestIsWarmupSession:
 
 
 class TestDefaultPrewarm:
-    """default_prewarm should populate proc.userdata['vad'] using silero."""
+    """default_prewarm loads the main VAD always, the adapter VAD only on opt-in."""
 
-    def test_loads_vad_into_userdata(self) -> None:
+    def test_loads_only_main_vad_by_default(self) -> None:
+        # Streaming-STT path (default) must NOT pay for a second ONNX session.
         proc = SimpleNamespace(userdata={})
-        sentinel = object()
-        with patch("voice_agent_core.runtime.silero.VAD.load", return_value=sentinel) as load:
+        main_vad = object()
+        with patch(
+            "voice_agent_core.runtime.silero.VAD.load", side_effect=[main_vad]
+        ) as load:
             default_prewarm(proc)
-            load.assert_called_once_with()
-        assert proc.userdata["vad"] is sentinel
+
+        assert proc.userdata["vad"] is main_vad
+        assert "stream_adapter_vad" not in proc.userdata
+        assert load.call_count == 1
+        # Main VAD carries its conservative tuning.
+        assert load.call_args.kwargs["min_silence_duration"] == 0.5
+        assert load.call_args.kwargs["prefix_padding_duration"] == 0.0
+
+    def test_loads_both_when_stream_adapter_vad_opted_in(self) -> None:
+        proc = SimpleNamespace(userdata={})
+        main_vad = object()
+        adapter_vad = object()
+        with patch(
+            "voice_agent_core.runtime.silero.VAD.load",
+            side_effect=[main_vad, adapter_vad],
+        ) as load:
+            default_prewarm(proc, stream_adapter_vad=True)
+
+        assert proc.userdata["vad"] is main_vad
+        assert proc.userdata["stream_adapter_vad"] is adapter_vad
+        # Adapter VAD is the aggressive profile (short silence + prefix padding).
+        assert load.call_count == 2
+        second = load.call_args_list[1]
+        assert second.kwargs["min_silence_duration"] == 0.35
+        assert second.kwargs["prefix_padding_duration"] == 0.35
 
 
 class TestDefaultRoomOptions:
