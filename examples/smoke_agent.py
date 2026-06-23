@@ -17,6 +17,7 @@ LiveKit URL, generate a token, and talk through your microphone.
 import asyncio
 import time
 from pathlib import Path
+from typing import Literal
 
 from livekit.agents import Agent, AgentServer, JobContext, cli
 
@@ -49,6 +50,13 @@ class SmokeSettings(BaseAgentSettings):
     """
 
     slack_webhook_url: str = ""
+    # Opener: 'say' speaks a canned line (TTS only, ~0.6-1s — no LLM round-trip on
+    # turn 0) for the snappiest first utterance; 'generate' has the LLM ideate the
+    # greeting (exercises the full pipeline, but adds LLM TTFT to the first line).
+    greeting_mode: Literal["say", "generate"] = "say"
+    greeting_text: str = (
+        "Hi! I'm a test agent for the voice pipeline. What's on your mind?"
+    )
 
 
 # Start the .env search from this script's directory (examples/) so it works
@@ -62,7 +70,9 @@ setup_observability(settings, service_name="voice-agent-core-smoke")
 # entrypoint runs. Importing the multilingual turn-detector plugin here registers
 # its inference runner early enough for local dev mode.
 if settings.turn_detection_mode == "multilingual":
-    from livekit.plugins.turn_detector.multilingual import MultilingualModel as _MultilingualModel  # noqa: F401
+    from livekit.plugins.turn_detector.multilingual import (
+        MultilingualModel as _MultilingualModel,  # noqa: F401
+    )
 
 server = AgentServer()
 # Module-level notifier — each session subprocess gets its own copy (forked from
@@ -174,13 +184,15 @@ async def entry(ctx: JobContext) -> None:
     )
     await ctx.connect()
 
-    # generate_reply has the LLM ideate the greeting. For lower latency,
-    # demos often prefer a canned line via session.say(...) instead — that
-    # skips the LLM round-trip on the first turn at the cost of a fixed
-    # opener. Smoke uses generate_reply to exercise the full pipeline.
-    await session.generate_reply(
-        instructions="Greet the user warmly and ask what's on their mind."
-    )
+    # Opener. GREETING_MODE=say (default) speaks a canned line — TTS only, no LLM
+    # round-trip on turn 0, so the first utterance lands in ~0.6-1s. GREETING_MODE=
+    # generate has the LLM ideate the greeting (exercises the full pipeline, slower).
+    if settings.greeting_mode == "say":
+        await session.say(settings.greeting_text)
+    else:
+        await session.generate_reply(
+            instructions="Greet the user warmly and ask what's on their mind."
+        )
 
 
 if __name__ == "__main__":
