@@ -7,20 +7,35 @@ Subclasses ``livekit.plugins.fishaudio.TTS`` and adds:
 - **Stream-level instrumentation** — measures stream-open→first-text and
   stream-open→first-audio latencies in addition to the plugin-emitted TTFB
 - **Sentence-boundary buffering** — accumulates LLM-streamed tokens until a
-  punctuation mark, then pushes the complete clause to upstream Fish TTS.
-  Reduces "chunk boundary in the middle of a word" artifacts and produces
-  more natural prosody at the cost of a small latency penalty (waits for
-  the next punctuation before emitting).
+  punctuation mark, then pushes the complete clause to the Fish TTS stream.
+  Reduces "chunk boundary in the middle of a word" artifacts.
+- **Native streaming impl** (``FISH_TTS_IMPL=native``, default) — drops the upstream
+  plugin's per-sentence flush and lets Fish chunk by ``chunk_length``/``min_chunk_length``.
+  This removes the per-sentence audio bursts that starve LiveKit's audio emitter
+  ("flush audio emitter due to slow audio generation") and the boundary clicks they
+  produce. (Text still goes through ``_InstrumentedStream`` sentence buffering first, so
+  Fish receives clauses — the change is that we don't *flush* between them.)
+  ``FISH_TTS_IMPL=plugin`` falls back to the upstream behavior for A-B comparison.
+- **Onset fade-in** (``FISH_TTS_ONSET_FADE_MS``) — optional short linear fade on the
+  first audio of each segment to declick abrupt onsets.
 """
 
 from __future__ import annotations
 
+import array
+import asyncio
+import dataclasses
 import time
 from typing import TYPE_CHECKING, Any
 
-from livekit.agents import APIConnectOptions, tts
+import aiohttp
+import msgpack
+from livekit import rtc
+from livekit.agents import APIConnectOptions, APIStatusError, tts, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
 from livekit.plugins import fishaudio
+from livekit.plugins.fishaudio.tts import SynthesizeStream as _UpstreamFishStream
+from livekit.plugins.fishaudio.tts import _build_tts_request
 
 from voice_agent_core.observability import MetricNames, get_logger, get_meter
 
@@ -59,8 +74,18 @@ class FishTTS(fishaudio.TTS):
     ``fishaudio.TTS``.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        impl: str = "native",
+        min_chunk_length: int = 20,
+        onset_fade_ms: int = 0,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
+        self._impl = impl
+        self._min_chunk_length = min_chunk_length
+        self._onset_fade_ms = onset_fade_ms
         self.on("metrics_collected", self._on_metrics)
         self.on("error", self._on_error)
         log.info(
@@ -69,6 +94,11 @@ class FishTTS(fishaudio.TTS):
             model=self.model,
             voice_id=self.voice_id,
             latency_mode=self.latency_mode,
+            output_format=self.output_format,
+            sample_rate=self.sample_rate,
+            impl=impl,
+            min_chunk_length=min_chunk_length,
+            onset_fade_ms=onset_fade_ms,
         )
 
     def synthesize(
@@ -85,9 +115,20 @@ class FishTTS(fishaudio.TTS):
         *,
         conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
     ) -> tts.SynthesizeStream:
+        if self._impl == "native":
+            inner: tts.SynthesizeStream = _NativeFishStream(
+                tts=self,
+                conn_options=conn_options,
+                min_chunk_length=self._min_chunk_length,
+            )
+            # Track for aclose() like the upstream stream() does.
+            self._streams.add(inner)
+        else:
+            inner = super().stream(conn_options=conn_options)
         return _InstrumentedStream(
-            inner=super().stream(conn_options=conn_options),
+            inner=inner,
             owner=self,
+            onset_fade_ms=self._onset_fade_ms,
         )
 
     def _attrs(self) -> dict[str, Any]:
@@ -129,6 +170,132 @@ class FishTTS(fishaudio.TTS):
         )
 
 
+def _native_start_request(opts: Any, min_chunk_length: int) -> dict[str, Any]:
+    """Fish ``start`` request for the native streaming impl.
+
+    Reuses the upstream field set (format / sample_rate / chunk_length / latency /
+    voice / normalize / prosody / sampling) so behavior matches the plugin, and adds
+    ``min_chunk_length`` — which the upstream ``_build_tts_request`` does not send.
+    """
+    request = dict(_build_tts_request(opts))
+    request["min_chunk_length"] = min_chunk_length
+    return request
+
+
+class _NativeFishStream(_UpstreamFishStream):
+    """Fish WebSocket streaming without the upstream's per-sentence flush.
+
+    The upstream ``SynthesizeStream`` tokenizes incoming text into sentences and
+    sends a ``flush`` after each one, forcing Fish to synthesize every sentence as a
+    separate burst. Between bursts the audio stream has gaps, so LiveKit's
+    ``AudioEmitter`` underruns ("flush audio emitter due to slow audio generation")
+    and each burst boundary is an abrupt amplitude step — an audible click.
+
+    This override drops the per-sentence flush and lets Fish decide when to synthesize
+    via ``chunk_length`` / ``min_chunk_length``; a single ``flush`` is sent at
+    end-of-input to synthesize the trailing buffer, then ``stop``. Only ``_run_ws`` is
+    overridden; the upstream ``_run`` (WS connect, emitter init, segment + error
+    handling) is reused.
+
+    Note on "continuous": text still passes through ``_InstrumentedStream``'s
+    sentence-boundary buffering before it reaches this stream, so Fish receives clauses,
+    not raw per-token text. The win here is *not flushing* between clauses (no forced
+    per-sentence bursts). Latency tradeoff: because we no longer force synthesis per
+    clause, first audio for a short opening clause depends on Fish starting early from
+    ``min_chunk_length`` rather than an explicit flush — keep ``min_chunk_length`` small
+    (default 20) so TTFT doesn't regress. Validated by local smoke (TTS first-byte
+    stayed ~0.6 s vs the plugin path).
+    """
+
+    def __init__(
+        self,
+        *,
+        tts: FishTTS,
+        conn_options: APIConnectOptions,
+        min_chunk_length: int,
+    ) -> None:
+        super().__init__(tts=tts, conn_options=conn_options)
+        self._min_chunk_length = min_chunk_length
+
+    async def _run_ws(
+        self,
+        ws: aiohttp.ClientWebSocketResponse,
+        output_emitter: tts.AudioEmitter,
+    ) -> None:
+        start_request = _native_start_request(self._opts, self._min_chunk_length)
+
+        async def send_task() -> None:
+            await ws.send_bytes(
+                msgpack.packb(
+                    {"event": "start", "request": start_request}, use_bin_type=True
+                )
+            )
+            first_token = True
+            async for data in self._input_ch:
+                # Native mode: ignore per-clause flush sentinels. Fish buffers text
+                # and synthesizes by chunk_length/min_chunk_length, so we get larger
+                # continuous chunks instead of one burst per sentence.
+                if isinstance(data, self._FlushSentinel):
+                    continue
+                if not data:
+                    continue
+                if first_token:
+                    self._mark_started()
+                    first_token = False
+                await ws.send_bytes(
+                    msgpack.packb({"event": "text", "text": data}, use_bin_type=True)
+                )
+            # One flush at end-of-input synthesizes the trailing buffer, then stop.
+            await ws.send_bytes(msgpack.packb({"event": "flush"}, use_bin_type=True))
+            await ws.send_bytes(msgpack.packb({"event": "stop"}, use_bin_type=True))
+
+        async def recv_task() -> None:
+            while True:
+                msg = await ws.receive()
+                if msg.type in (
+                    aiohttp.WSMsgType.CLOSED,
+                    aiohttp.WSMsgType.CLOSE,
+                    aiohttp.WSMsgType.CLOSING,
+                ):
+                    raise APIStatusError(
+                        "Fish Audio websocket connection closed unexpectedly",
+                        status_code=ws.close_code or -1,
+                        request_id=None,
+                        body=f"{msg.data=} {msg.extra=}",
+                    )
+                if msg.type != aiohttp.WSMsgType.BINARY:
+                    # Mirror upstream: log non-binary frames so protocol drift is visible.
+                    log.debug("fish_tts.native_unexpected_msg_type", msg_type=str(msg.type))
+                    continue
+
+                data = msgpack.unpackb(msg.data, raw=False)
+                event = data.get("event")
+                if event == "audio":
+                    audio = data.get("audio")
+                    if audio:
+                        output_emitter.push(audio)
+                elif event == "finish":
+                    if data.get("reason") == "error":
+                        raise APIStatusError(
+                            "Fish Audio TTS reported an error",
+                            status_code=-1,
+                            request_id=None,
+                            body=str(data),
+                        )
+                    break
+                else:
+                    log.debug("fish_tts.native_unknown_event", event=event)
+
+        tasks = [
+            asyncio.create_task(send_task(), name="fish_native_send"),
+            asyncio.create_task(recv_task(), name="fish_native_recv"),
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            await utils.aio.gracefully_cancel(*tasks)
+
+
 _SENTENCE_PUNCT = frozenset({".", "。", ",", "，", "!", "！", "?", "？", ";", "；", ":", "：", "\n"})  # noqa: RUF001  (intentional full-width CJK punctuation)
 """Characters that close a TTS-worthy clause.
 
@@ -158,7 +325,13 @@ class _InstrumentedStream:
     longer fall mid-word.
     """
 
-    def __init__(self, *, inner: tts.SynthesizeStream, owner: FishTTS) -> None:
+    def __init__(
+        self,
+        *,
+        inner: tts.SynthesizeStream,
+        owner: FishTTS,
+        onset_fade_ms: int = 0,
+    ) -> None:
         self._inner = inner
         self._owner = owner
         self._opened_at = time.perf_counter()
@@ -166,6 +339,12 @@ class _InstrumentedStream:
         self._first_audio_logged = False
         self._chars_buffered = 0
         self._sentence_buffer = ""
+        # Onset fade-in state (per-segment). _fade_total is computed lazily from the
+        # frame's own sample rate so it's correct regardless of output sample rate.
+        self._onset_fade_ms = onset_fade_ms
+        self._fade_segment: str | None = None
+        self._fade_done = 0
+        self._fade_total = 0
 
     def _flush_sentence_buffer(self) -> None:
         """Push any remaining buffered text and reset the buffer."""
@@ -236,8 +415,45 @@ class _InstrumentedStream:
     def __aiter__(self) -> _InstrumentedStream:
         return self
 
+    def _apply_onset_fade(self, frame: tts.SynthesizedAudio) -> tts.SynthesizedAudio:
+        """Ramp the first ``onset_fade_ms`` of each segment's PCM from 0→full gain.
+
+        Turns an abrupt onset (silence → full amplitude in ~1 sample) into a short
+        slope, which removes the broadband click without audibly softening the attack.
+        The fade may span several frames; ``_fade_done`` tracks progress per segment.
+
+        Note: applied consumer-side (after the AudioEmitter), so it reaches playback and
+        the session recording but NOT ``LK_DUMP_TTS`` dumps, which are written upstream
+        in the emitter — i.e. dumps are pre-fade and can't be used to validate it.
+
+        ``_fade_pcm_bytes`` assumes 16-bit mono PCM; Fish output is documented mono, so
+        we skip (rather than corrupt) anything multi-channel as a safety net.
+        """
+        if frame.frame.num_channels != 1:
+            return frame
+        if frame.segment_id != self._fade_segment:
+            self._fade_segment = frame.segment_id
+            self._fade_done = 0
+            self._fade_total = max(
+                1, int(frame.frame.sample_rate * self._onset_fade_ms / 1000)
+            )
+        if self._fade_done >= self._fade_total:
+            return frame
+        faded, self._fade_done = _fade_pcm_bytes(
+            bytes(frame.frame.data), self._fade_total, self._fade_done
+        )
+        new_audio = rtc.AudioFrame(
+            data=faded,
+            sample_rate=frame.frame.sample_rate,
+            num_channels=frame.frame.num_channels,
+            samples_per_channel=frame.frame.samples_per_channel,
+        )
+        return dataclasses.replace(frame, frame=new_audio)
+
     async def __anext__(self) -> tts.SynthesizedAudio:
         frame = await self._inner.__anext__()
+        if self._onset_fade_ms > 0:
+            frame = self._apply_onset_fade(frame)
         if not self._first_audio_logged:
             self._first_audio_logged = True
             now = time.perf_counter()
@@ -272,11 +488,31 @@ class _InstrumentedStream:
         return getattr(self._inner, name)
 
 
+def _fade_pcm_bytes(data: bytes, fade_total: int, fade_done: int) -> tuple[bytes, int]:
+    """Apply a linear gain ramp to 16-bit mono PCM, resuming from ``fade_done``.
+
+    Scales sample ``k`` (counting from segment start) by ``k / fade_total`` for
+    ``fade_done <= k < fade_total``; samples at/after ``fade_total`` are untouched.
+    Returns the new bytes and the updated ramp position. Pure function — unit-tested.
+    """
+    samples = array.array("h")
+    samples.frombytes(data)
+    i = 0
+    done = fade_done
+    n = len(samples)
+    while i < n and done < fade_total:
+        samples[i] = int(samples[i] * done / fade_total)
+        i += 1
+        done += 1
+    return samples.tobytes(), done
+
+
 def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     """Construct an instrumented Fish TTS from a settings object.
 
     Required env: ``FISH_API_KEY``. Optional: ``TTS_VOICE_ID``, ``TTS_MODEL``,
-    ``FISH_TTS_LATENCY_MODE``, ``FISH_TTS_OUTPUT_FORMAT``, ``FISH_TTS_SAMPLE_RATE``.
+    ``FISH_TTS_LATENCY_MODE``, ``FISH_TTS_OUTPUT_FORMAT``, ``FISH_TTS_SAMPLE_RATE``,
+    ``FISH_TTS_IMPL``, ``FISH_TTS_MIN_CHUNK_LENGTH``, ``FISH_TTS_ONSET_FADE_MS``.
     """
     if not settings.fish_api_key:
         raise ValueError("FISH_API_KEY is required to build Fish TTS")
@@ -286,6 +522,9 @@ def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
         "model": settings.tts_model,
         "latency_mode": settings.fish_tts_latency_mode,
         "output_format": settings.fish_tts_output_format,
+        "impl": settings.fish_tts_impl,
+        "min_chunk_length": settings.fish_tts_min_chunk_length,
+        "onset_fade_ms": settings.fish_tts_onset_fade_ms,
     }
     if settings.tts_voice_id:
         kwargs["voice_id"] = settings.tts_voice_id

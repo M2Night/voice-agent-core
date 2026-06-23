@@ -31,6 +31,19 @@ FishTTSOutputFormat = Literal["wav", "pcm", "mp3", "opus"]
 """Fish Audio TTS wire format. ``pcm`` (raw, default) is decoded by LiveKit's
 AudioEmitter as a passthrough; ``wav``/``mp3``/``opus`` route through a per-segment
 container decoder whose start-up transient can produce an audible first-phoneme click."""
+FishTTSImpl = Literal["native", "plugin"]
+"""Which Fish TTS streaming implementation to use.
+
+- ``native`` (default): voice-agent-core's own streaming path — sends clause-buffered
+  text to Fish *without* a per-clause flush, letting Fish chunk by
+  ``chunk_length``/``min_chunk_length`` instead of synthesizing one burst per sentence.
+  (Text is still clause-buffered by ``_InstrumentedStream`` upstream; the change is
+  dropping the per-sentence flush.) Avoids the per-sentence audio bursts that starve
+  LiveKit's audio emitter (``flush audio emitter due to slow audio generation``) and
+  the boundary clicks they cause.
+- ``plugin``: the upstream ``livekit-plugins-fishaudio`` streaming path (per-sentence
+  flush). Kept as a fallback / for A-B comparison.
+"""
 OTelExporter = Literal["console", "none"]
 TurnDetectionMode = Literal["multilingual", "vad", "stt"]
 """How to detect end-of-user-turn.
@@ -102,6 +115,36 @@ class BaseAgentSettings(BaseSettings):
         description=(
             "Optional Fish TTS sample rate in Hz. None keeps the Fish plugin per-format "
             "default (pcm/wav 24000, opus 48000, mp3 32000)."
+        ),
+    )
+    fish_tts_impl: FishTTSImpl = Field(
+        default="native",
+        description=(
+            "Fish TTS streaming implementation: 'native' (default, clause-buffered "
+            "streaming without per-sentence Fish flush — smoother audio) or 'plugin' "
+            "(upstream livekit-plugins-fishaudio, per-sentence flush). See FishTTSImpl."
+        ),
+    )
+    fish_tts_min_chunk_length: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        description=(
+            "Fish TTS min_chunk_length (chars, 0-100) for the native impl: the smallest "
+            "text unit Fish will synthesize, so it emits larger audio chunks rather than "
+            "tiny bursts. Ignored by the 'plugin' impl (upstream doesn't send it)."
+        ),
+    )
+    fish_tts_onset_fade_ms: int = Field(
+        default=8,
+        ge=0,
+        le=50,
+        description=(
+            "Linear fade-in (milliseconds) applied to the first audio of each TTS segment "
+            "to declick abrupt onsets (Fish sometimes starts a segment at full amplitude). "
+            "Default 8 ms removes the click without audibly softening the attack and adds no "
+            "latency (it only scales already-arrived samples); set 0 to disable. Applied to "
+            "the decoded PCM frames, independent of wire format."
         ),
     )
 

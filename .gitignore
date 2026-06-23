@@ -50,3 +50,6 @@ htmlcov/
 
 # uv cache (lock file IS committed)
 .uv-cache/
+
+# LiveKit TTS debug dumps (LK_DUMP_TTS=1)
+lk_dump/

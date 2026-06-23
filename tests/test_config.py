@@ -100,6 +100,9 @@ class TestBaseAgentSettings:
         assert s.llm_model == "openai/gpt-5.4-mini"
         assert s.tts_model == "s2-pro"
         assert s.fish_tts_latency_mode == "balanced"
+        assert s.fish_tts_impl == "native"
+        assert s.fish_tts_min_chunk_length == 20
+        assert s.fish_tts_onset_fade_ms == 8
         assert s.turn_detection_mode == "multilingual"
         assert s.preemptive_generation is True
         assert s.min_endpointing_delay is None
