@@ -37,7 +37,9 @@ from livekit.agents import tts as agents_tts
 from voice_agent_core.deepgram import DeepgramSettings, build_deepgram_stt
 from voice_agent_core.fish import FishSettings, build_fish_stt, build_fish_tts
 from voice_agent_core.llm import (
+    CustomLLMSettings,
     OpenRouterSettings,
+    build_custom_llm,
     build_livekit_llm,
     build_openrouter_llm,
 )
@@ -216,6 +218,13 @@ register_llm(
         name="openrouter",
         build=build_openrouter_llm,
         settings_cls=OpenRouterSettings,
+    )
+)
+register_llm(
+    LLMProvider(
+        name="custom",
+        build=build_custom_llm,
+        settings_cls=CustomLLMSettings,
     )
 )
 

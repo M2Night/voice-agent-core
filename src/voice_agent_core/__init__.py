@@ -31,7 +31,7 @@ from voice_agent_core.fish import (
     build_fish_tts,
 )
 from voice_agent_core.idle import IdleWatcher, OnIdle, attach_idle_watcher
-from voice_agent_core.llm import OpenRouterSettings
+from voice_agent_core.llm import CustomLLMSettings, OpenRouterSettings
 from voice_agent_core.notify import (
     NotificationField,
     NotificationPayload,
@@ -84,6 +84,7 @@ __version__ = "0.2.1"
 __all__ = [
     "DEFAULT_SUMMARY_INSTRUCTION",
     "BaseAgentSettings",
+    "CustomLLMSettings",
     "DeepgramSettings",
     "FishSTT",
     "FishSettings",
