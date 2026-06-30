@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
-from livekit.agents import Agent, AgentServer, JobContext, cli
+from livekit.agents import Agent, AgentServer, JobContext, JobProcess, cli
 
 from voice_agent_core import (
     BaseAgentSettings,
@@ -96,13 +96,17 @@ server = AgentServer()
 # the worker). Stateless: sharing initial config across forks is safe.
 # Empty webhook_url triggers SlackNotifier's dev-log mode (no HTTP call).
 notifier = SlackNotifier(webhook_url=settings.slack_webhook_url)
-# default_prewarm loads the main silero VAD into proc.userdata["vad"]. This smoke
-# demo uses Deepgram (streaming STT), so it does NOT opt into the second
-# stream-adapter VAD; a Fish-batch-STT deployment would use
-# `lambda proc: default_prewarm(proc, stream_adapter_vad=True)` instead. Demos that
-# need extra prewarm work should wrap this: call default_prewarm(proc) first, then
-# stash whatever else on proc.userdata.
-server.setup_fnc = default_prewarm
+def prewarm(proc: JobProcess) -> None:
+    """Prewarm the VAD profile(s) needed by the selected STT path."""
+    default_prewarm(proc, stream_adapter_vad=settings.stt_provider == "fish")
+
+
+# default_prewarm always loads the main silero VAD into proc.userdata["vad"].
+# When STT_PROVIDER=fish, it also loads the second stream-adapter VAD profile so
+# Fish's batch ASR can cut utterance segments without sharing the main session VAD.
+# Demos that need extra prewarm work should wrap this: call default_prewarm first,
+# then stash whatever else on proc.userdata.
+server.setup_fnc = prewarm
 
 
 class SmokeAgent(Agent):
@@ -202,9 +206,9 @@ async def entry(ctx: JobContext) -> None:
         ),
     )
 
-    # default_room_options() returns RoomOptions with AI Coustics QUAIL_VF_S
-    # mic-side noise cancellation. For demos that need different audio config,
-    # construct RoomOptions inline instead.
+    # default_room_options() returns RoomOptions with LiveKit BVC server-side
+    # noise cancellation. For demos that need different audio config, construct
+    # RoomOptions inline instead.
     await session.start(
         agent=SmokeAgent(),
         room=ctx.room,
