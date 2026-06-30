@@ -17,6 +17,7 @@ from livekit.agents import APIConnectionError, APIStatusError, APITimeoutError
 
 from voice_agent_core.config import BaseAgentSettings
 from voice_agent_core.fish import FishSTT, build_fish_stt, build_fish_tts
+from voice_agent_core.fish.stt import _USER_AGENT
 from voice_agent_core.fish.tts import (
     _fade_pcm_bytes,
     _native_start_request,
@@ -121,6 +122,11 @@ class TestBuildFishTTS:
 
 
 class TestBuildFishSTT:
+    def test_user_agent_uses_package_version(self) -> None:
+        from voice_agent_core import __version__
+
+        assert f"voice-agent-core/{__version__}" == _USER_AGENT
+
     def test_requires_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("FISH_API_KEY", raising=False)
         s = BaseAgentSettings()

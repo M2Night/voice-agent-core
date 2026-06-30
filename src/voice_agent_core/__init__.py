@@ -13,6 +13,7 @@ Public API re-exported here for convenience::
     )
 """
 
+from voice_agent_core._version import __version__
 from voice_agent_core.config import (
     BaseAgentSettings,
     LogFormat,
@@ -83,8 +84,6 @@ from voice_agent_core.transcript import (
     format_transcript,
     summarize_transcript,
 )
-
-__version__ = "0.2.1"
 
 __all__ = [
     "DEFAULT_SUMMARY_INSTRUCTION",

@@ -6,8 +6,9 @@ Design:
   cleanly to any log aggregator); console renderer for local TTY dev. Same call sites,
   different rendering.
 - **Metrics** via ``opentelemetry`` — emits to stdout by default (``ConsoleMetricExporter``)
-  so they're visible during local dev. Swap to OTLP (Honeycomb, Datadog, Grafana, etc.)
-  via one env var without touching call sites.
+  so they're visible during local dev, or can be disabled with ``exporter='none'``.
+  OTLP exporters (Honeycomb, Datadog, Grafana, etc.) are not wired yet; add an
+  ``"otlp"`` branch when production metrics shipping needs it.
 
 Call :func:`setup_observability` once at process startup. Use :func:`get_logger` and
 :func:`get_meter` from anywhere afterward.

@@ -10,6 +10,7 @@ import sys
 from types import ModuleType
 
 import pytest
+from pydantic import ValidationError
 
 from voice_agent_core import providers
 from voice_agent_core.config import BaseAgentSettings
@@ -261,6 +262,24 @@ class TestProviderSettings:
         assert c.api_key == "secret"
         assert c.max_tokens == 60
         assert c.temperature == 0.3
+
+    def test_custom_llm_settings_validate_numeric_bounds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from voice_agent_core import CustomLLMSettings
+
+        monkeypatch.setenv("CUSTOM_LLM_MAX_TOKENS", "-1")
+        with pytest.raises(ValidationError):
+            CustomLLMSettings()
+
+        monkeypatch.setenv("CUSTOM_LLM_MAX_TOKENS", "0")
+        monkeypatch.setenv("CUSTOM_LLM_TEMPERATURE", "2.1")
+        settings = CustomLLMSettings()
+        assert settings.temperature == 2.1
+
+        monkeypatch.setenv("CUSTOM_LLM_TEMPERATURE", "-0.1")
+        with pytest.raises(ValidationError):
+            CustomLLMSettings()
 
     def test_provider_config_schema(self) -> None:
         # Fish exposes a provider-specific config schema (for a frontend's Fish section).

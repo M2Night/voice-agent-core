@@ -34,6 +34,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from voice_agent_core._version import __version__
 from voice_agent_core.fish.settings import FishSettings
 from voice_agent_core.observability import MetricNames, get_logger, get_meter
 
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
 
 DEFAULT_BASE_URL = "https://api.fish.audio"
 FISH_ASR_MODEL = "fish-audio/asr"
-_USER_AGENT = "voice-agent-core/0.1"
+_USER_AGENT = f"voice-agent-core/{__version__}"
 
 log = get_logger(__name__)
 _meter = get_meter("voice_agent_core.fish.stt")

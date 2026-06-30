@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from livekit.agents import llm as agents_llm
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from voice_agent_core.observability import get_logger
@@ -70,8 +71,8 @@ class CustomLLMSettings(BaseSettings):
     api_key: str = "EMPTY"
     # Hard cap on reply length, sent as the legacy `max_tokens` field via extra_body
     # (SGLang/vLLM compatibility). 0 = no cap.
-    max_tokens: int = 0
-    temperature: float = 0.6
+    max_tokens: int = Field(default=0, ge=0)
+    temperature: float = Field(default=0.6, ge=0)
 
 
 def build_custom_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
