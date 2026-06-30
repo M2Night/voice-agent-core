@@ -177,17 +177,30 @@ class MetricNames:
     when different consumer applications add instrumentation independently.
     """
 
-    # --- Fish Audio ---
+    # --- Cross-provider STT/TTS ---
+    TTS_TTFB_MS = "tts.ttfb_ms"
+    """TTS time-to-first-byte (network ack)."""
+    TTS_TTFT_MS = "tts.ttft_ms"
+    """TTS time-to-first-audio-frame."""
+    TTS_RTF = "tts.rtf"
+    """TTS real-time-factor (synth_duration / audio_duration). <1.0 is realtime."""
+    TTS_ERRORS = "tts.errors"
+    STT_LATENCY_MS = "stt.latency_ms"
+    STT_ERRORS = "stt.errors"
+    STT_SEGMENT_DROPPED = "stt.segment_dropped"
+
+    # --- Fish Audio compatibility aliases ---
     FISH_TTS_TTFB_MS = "fish_tts.ttfb_ms"
-    """Fish TTS time-to-first-byte (network ack)."""
+    """Deprecated Fish-specific alias for TTS_TTFB_MS; keep dashboards compatible."""
     FISH_TTS_TTFT_MS = "fish_tts.ttft_ms"
-    """Fish TTS time-to-first-audio-frame."""
+    """Deprecated Fish-specific alias for TTS_TTFT_MS; keep dashboards compatible."""
     FISH_TTS_RTF = "fish_tts.rtf"
-    """Fish TTS real-time-factor (synth_duration / audio_duration). <1.0 is realtime."""
+    """Deprecated Fish-specific alias for TTS_RTF; keep dashboards compatible."""
     FISH_TTS_ERRORS = "fish_tts.errors"
     FISH_STT_LATENCY_MS = "fish_stt.latency_ms"
+    """Deprecated Fish-specific alias for STT_LATENCY_MS; keep dashboards compatible."""
     FISH_STT_ERRORS = "fish_stt.errors"
-    STT_SEGMENT_DROPPED = "stt.segment_dropped"
+    """Deprecated Fish-specific alias for STT_ERRORS; keep dashboards compatible."""
 
     # --- LLM ---
     LLM_LATENCY_MS = "llm.latency_ms"

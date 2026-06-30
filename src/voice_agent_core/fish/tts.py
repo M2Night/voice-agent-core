@@ -59,19 +59,38 @@ _h_ttfb = _meter.create_histogram(
     unit="ms",
     description="Fish TTS time-to-first-byte",
 )
+_h_ttfb_generic = _meter.create_histogram(
+    MetricNames.TTS_TTFB_MS,
+    unit="ms",
+    description="TTS time-to-first-byte",
+)
 _h_rtf = _meter.create_histogram(
     MetricNames.FISH_TTS_RTF,
     unit="ratio",
     description="Fish TTS real-time factor (synth_duration / audio_duration). <1.0 means realtime.",
+)
+_h_rtf_generic = _meter.create_histogram(
+    MetricNames.TTS_RTF,
+    unit="ratio",
+    description="TTS real-time factor (synth_duration / audio_duration). <1.0 means realtime.",
 )
 _h_stream_to_audio = _meter.create_histogram(
     MetricNames.FISH_TTS_TTFT_MS,
     unit="ms",
     description="Stream-open to first-audio-frame latency (perceived user latency)",
 )
+_h_stream_to_audio_generic = _meter.create_histogram(
+    MetricNames.TTS_TTFT_MS,
+    unit="ms",
+    description="Stream-open to first-audio-frame latency (perceived user latency)",
+)
 _c_errors = _meter.create_counter(
     MetricNames.FISH_TTS_ERRORS,
     description="Fish TTS error count",
+)
+_c_errors_generic = _meter.create_counter(
+    MetricNames.TTS_ERRORS,
+    description="TTS error count",
 )
 
 
@@ -157,8 +176,10 @@ class FishTTS(fishaudio.TTS):
         attrs = self._attrs()
         if ttfb_ms is not None:
             _h_ttfb.record(ttfb_ms, attributes=attrs)
+            _h_ttfb_generic.record(ttfb_ms, attributes=attrs)
         if rtf is not None:
             _h_rtf.record(rtf, attributes=attrs)
+            _h_rtf_generic.record(rtf, attributes=attrs)
 
         log.info(
             "fish_tts.metrics",
@@ -175,7 +196,9 @@ class FishTTS(fishaudio.TTS):
         )
 
     def _on_error(self, err: Any) -> None:
-        _c_errors.add(1, attributes=self._attrs())
+        attrs = self._attrs()
+        _c_errors.add(1, attributes=attrs)
+        _c_errors_generic.add(1, attributes=attrs)
         log.error(
             "fish_tts.error",
             error=repr(getattr(err, "error", err)),
@@ -488,8 +511,12 @@ class _InstrumentedStream:
             )
 
             if stream_to_audio_ms is not None:
+                attrs = self._owner._attrs()
                 _h_stream_to_audio.record(
-                    stream_to_audio_ms, attributes=self._owner._attrs()
+                    stream_to_audio_ms, attributes=attrs
+                )
+                _h_stream_to_audio_generic.record(
+                    stream_to_audio_ms, attributes=attrs
                 )
 
             log.info(

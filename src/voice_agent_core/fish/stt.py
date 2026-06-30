@@ -52,10 +52,30 @@ _h_latency = _meter.create_histogram(
     unit="ms",
     description="Fish ASR end-to-end request latency",
 )
+_h_latency_generic = _meter.create_histogram(
+    MetricNames.STT_LATENCY_MS,
+    unit="ms",
+    description="STT end-to-end request latency",
+)
 _c_errors = _meter.create_counter(
     MetricNames.FISH_STT_ERRORS,
     description="Fish ASR error count",
 )
+_c_errors_generic = _meter.create_counter(
+    MetricNames.STT_ERRORS,
+    description="STT error count",
+)
+
+
+def _record_latency(latency_ms: float, attrs: dict[str, Any]) -> None:
+    _h_latency.record(latency_ms, attributes=attrs)
+    _h_latency_generic.record(latency_ms, attributes=attrs)
+
+
+def _record_error(attrs: dict[str, Any]) -> None:
+    _c_errors.add(1, attributes=attrs)
+    _c_errors_generic.add(1, attributes=attrs)
+
 
 @dataclass(slots=True)
 class _STTOptions:
@@ -139,17 +159,17 @@ class FishSTT(stt.STT):
                 timeout_s=conn_options.timeout,
             )
         except APIConnectionError:
-            _c_errors.add(1, attributes={**attrs, "kind": "connection"})
+            _record_error({**attrs, "kind": "connection"})
             raise
         except APITimeoutError:
-            _c_errors.add(1, attributes={**attrs, "kind": "timeout"})
+            _record_error({**attrs, "kind": "timeout"})
             raise
 
         latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
-        _h_latency.record(latency_ms, attributes=attrs)
+        _record_latency(latency_ms, attrs)
 
         if status >= 400:
-            _c_errors.add(1, attributes={**attrs, "kind": f"http_{status}"})
+            _record_error({**attrs, "kind": f"http_{status}"})
             log.error(
                 "fish_stt.http_error",
                 request_id=request_id,

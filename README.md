@@ -1,14 +1,15 @@
 # voice-agent-core
 
-Shared Python library powering Fish Audio's voice agent by leveraging with LiveKit
+Shared Python library powering Fish Audio's voice agents on LiveKit.
+
 ## What it provides
 
-- **Fish Audio STT/TTS adapters** with built-in metrics (TTFB, TTFT, RTF) and retry
-- **LLM factory** — LiveKit Inference (default) + OpenRouter backends, switchable via env var
+- **STT/TTS adapters** — Deepgram or Fish STT, Fish or Inworld TTS, with provider defaults resolved through the registry
+- **LLM factory** — OpenRouter (default), LiveKit Inference, or any OpenAI-compatible custom endpoint, switchable via env var
 - **Pipeline factory** — assemble STT + TTS + LLM + VAD + turn-detection from one settings object
-- **Runtime helpers** (v0.2.0+) — `default_prewarm`, `build_session`, `default_room_options`, `warm_tts`, `is_warmup_session`: the hardened defaults every Fish voice demo arrived at after iteration, so new demos start there
-- **SlackNotifier** — Block Kit payloads with retry + dev-log fallback when no webhook is set
-- **Observability** — `structlog` JSON logging + OpenTelemetry metrics (console exporter by default; swap to Honeycomb/Datadog/Prometheus via one env var)
+- **Runtime helpers** — `default_prewarm`, `build_session`, `default_room_options`, `warm_tts`, `is_warmup_session`: hardened defaults for LiveKit voice agents
+- **Notifier interface + SlackNotifier** — provider-agnostic payloads, Slack Block Kit delivery, retry, and dev-log fallback when no webhook is set
+- **Observability** — `structlog` JSON logging + OpenTelemetry metrics with console/no-op exporters; OTLP shipping can be added behind the reserved exporter branch
 
 ## Install
 
@@ -21,7 +22,7 @@ uv add "voice-agent-core @ file://$(pwd)/../voice-agent-core"
 For production / published consumers, pin to a tagged version:
 
 ```bash
-uv add "voice-agent-core @ git+https://github.com/M2Night/voice-agent-core.git@v0.2.0"
+uv add "voice-agent-core @ git+https://github.com/M2Night/voice-agent-core.git@v0.2.1"
 ```
 
 ## Examples

@@ -15,6 +15,7 @@ import pytest
 from voice_agent_core.notify import (
     NotificationField,
     NotificationPayload,
+    Notifier,
     SlackNotifier,
 )
 
@@ -44,6 +45,11 @@ class TestDevMode:
 
         notifier = SlackNotifier(webhook_url="")
         await notifier.send(_sample_payload())  # must not raise
+
+
+class TestNotifierProtocol:
+    def test_slack_notifier_satisfies_notifier_protocol(self) -> None:
+        assert isinstance(SlackNotifier(), Notifier)
 
 
 class TestFormatBlocks:

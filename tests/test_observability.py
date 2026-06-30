@@ -64,6 +64,12 @@ class TestMetrics:
 
     def test_metric_names_are_strings(self) -> None:
         # Sanity check that constants exist and look right
+        assert MetricNames.TTS_TTFB_MS == "tts.ttfb_ms"
+        assert MetricNames.TTS_TTFT_MS == "tts.ttft_ms"
+        assert MetricNames.TTS_RTF == "tts.rtf"
+        assert MetricNames.TTS_ERRORS == "tts.errors"
+        assert MetricNames.STT_LATENCY_MS == "stt.latency_ms"
+        assert MetricNames.STT_ERRORS == "stt.errors"
         assert MetricNames.FISH_TTS_TTFB_MS == "fish_tts.ttfb_ms"
         assert MetricNames.LLM_LATENCY_MS == "llm.latency_ms"
         assert MetricNames.SESSION_COUNT == "session.count"

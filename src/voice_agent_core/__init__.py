@@ -1,149 +1,113 @@
-"""voice_agent_core — shared infrastructure for Fish Audio voice agent.
+"""Public convenience API for voice-agent-core.
 
-Public API re-exported here for convenience::
-
-    from voice_agent_core import (
-        BaseAgentSettings,
-        load_yaml,
-        load_env_walking_up,
-        setup_observability,
-        get_logger,
-        get_meter,
-        MetricNames,
-    )
+The package root intentionally lazy-loads submodules. A plain
+``import voice_agent_core`` should stay cheap and avoid importing optional
+provider stacks; ``from voice_agent_core import build_pipeline`` keeps the
+same public API and loads only the module that owns the requested symbol.
 """
 
-from voice_agent_core._version import __version__
-from voice_agent_core.config import (
-    BaseAgentSettings,
-    LogFormat,
-    LogLevel,
-    OTelExporter,
-    load_env_walking_up,
-    load_yaml,
-)
-from voice_agent_core.deepgram import DeepgramSettings, build_deepgram_stt
-from voice_agent_core.fish import (
-    FishSettings,
-    FishSTT,
-    FishTTS,
-    FishTTSLatencyMode,
-    build_fish_stt,
-    build_fish_tts,
-)
-from voice_agent_core.idle import IdleWatcher, OnIdle, attach_idle_watcher
-from voice_agent_core.inworld import (
-    InworldSettings,
-    InworldTTSDeliveryMode,
-    build_inworld_tts,
-)
-from voice_agent_core.llm import CustomLLMSettings, OpenRouterSettings
-from voice_agent_core.notify import (
-    NotificationField,
-    NotificationPayload,
-    SlackNotifier,
-)
-from voice_agent_core.observability import (
-    MetricNames,
-    configure_logging,
-    configure_metrics,
-    get_logger,
-    get_meter,
-    setup_observability,
-    shutdown_observability,
-)
-from voice_agent_core.pipeline import PipelineComponents, build_pipeline
-from voice_agent_core.providers import (
-    LLMProvider,
-    STTProvider,
-    TTSProvider,
-    build_llm,
-    build_stt,
-    build_tts,
-    list_llm_providers,
-    list_stt_providers,
-    list_tts_providers,
-    llm_models,
-    provider_config_schema,
-    register_llm,
-    register_stt,
-    register_tts,
-    stt_models,
-    tts_models,
-)
-from voice_agent_core.runtime import (
-    build_session,
-    default_prewarm,
-    default_room_options,
-    is_warmup_session,
-    warm_tts,
-)
-from voice_agent_core.stt import StreamAdapter
-from voice_agent_core.transcript import (
-    DEFAULT_SUMMARY_INSTRUCTION,
-    format_transcript,
-    summarize_transcript,
-)
+from __future__ import annotations
 
-__all__ = [
-    "DEFAULT_SUMMARY_INSTRUCTION",
-    "BaseAgentSettings",
-    "CustomLLMSettings",
-    "DeepgramSettings",
-    "FishSTT",
-    "FishSettings",
-    "FishTTS",
-    "FishTTSLatencyMode",
-    "IdleWatcher",
-    "InworldSettings",
-    "InworldTTSDeliveryMode",
-    "LLMProvider",
-    "LogFormat",
-    "LogLevel",
-    "MetricNames",
-    "NotificationField",
-    "NotificationPayload",
-    "OTelExporter",
-    "OnIdle",
-    "OpenRouterSettings",
-    "PipelineComponents",
-    "STTProvider",
-    "SlackNotifier",
-    "StreamAdapter",
-    "TTSProvider",
-    "__version__",
-    "attach_idle_watcher",
-    "build_deepgram_stt",
-    "build_fish_stt",
-    "build_fish_tts",
-    "build_inworld_tts",
-    "build_llm",
-    "build_pipeline",
-    "build_session",
-    "build_stt",
-    "build_tts",
-    "configure_logging",
-    "configure_metrics",
-    "default_prewarm",
-    "default_room_options",
-    "format_transcript",
-    "get_logger",
-    "get_meter",
-    "is_warmup_session",
-    "list_llm_providers",
-    "list_stt_providers",
-    "list_tts_providers",
-    "llm_models",
-    "load_env_walking_up",
-    "load_yaml",
-    "provider_config_schema",
-    "register_llm",
-    "register_stt",
-    "register_tts",
-    "setup_observability",
-    "shutdown_observability",
-    "stt_models",
-    "summarize_transcript",
-    "tts_models",
-    "warm_tts",
-]
+from importlib import import_module
+from typing import Any
+
+from voice_agent_core._version import __version__
+
+_LAZY_EXPORTS = {
+    "BaseAgentSettings": "voice_agent_core.config",
+    "CustomLLMSettings": "voice_agent_core.llm",
+    "DEFAULT_SUMMARY_INSTRUCTION": "voice_agent_core.transcript",
+    "DeepgramSettings": "voice_agent_core.deepgram",
+    "FishSTT": "voice_agent_core.fish",
+    "FishSettings": "voice_agent_core.fish",
+    "FishTTS": "voice_agent_core.fish",
+    "FishTTSLatencyMode": "voice_agent_core.fish",
+    "IdleWatcher": "voice_agent_core.idle",
+    "InworldSettings": "voice_agent_core.inworld",
+    "InworldTTSDeliveryMode": "voice_agent_core.inworld",
+    "LLMProvider": "voice_agent_core.providers",
+    "LogFormat": "voice_agent_core.config",
+    "LogLevel": "voice_agent_core.config",
+    "MetricNames": "voice_agent_core.observability",
+    "NotificationField": "voice_agent_core.notify",
+    "NotificationPayload": "voice_agent_core.notify",
+    "Notifier": "voice_agent_core.notify",
+    "OTelExporter": "voice_agent_core.config",
+    "OnIdle": "voice_agent_core.idle",
+    "OpenRouterSettings": "voice_agent_core.llm",
+    "PipelineComponents": "voice_agent_core.pipeline",
+    "STTProvider": "voice_agent_core.providers",
+    "SlackNotifier": "voice_agent_core.notify",
+    "StreamAdapter": "voice_agent_core.stt",
+    "TTSProvider": "voice_agent_core.providers",
+    "attach_idle_watcher": "voice_agent_core.idle",
+    "build_deepgram_stt": "voice_agent_core.deepgram",
+    "build_fish_stt": "voice_agent_core.fish",
+    "build_fish_tts": "voice_agent_core.fish",
+    "build_inworld_tts": "voice_agent_core.inworld",
+    "build_llm": "voice_agent_core.providers",
+    "build_pipeline": "voice_agent_core.pipeline",
+    "build_session": "voice_agent_core.runtime",
+    "build_stt": "voice_agent_core.providers",
+    "build_tts": "voice_agent_core.providers",
+    "configure_logging": "voice_agent_core.observability",
+    "configure_metrics": "voice_agent_core.observability",
+    "default_prewarm": "voice_agent_core.runtime",
+    "default_room_options": "voice_agent_core.runtime",
+    "format_transcript": "voice_agent_core.transcript",
+    "get_logger": "voice_agent_core.observability",
+    "get_meter": "voice_agent_core.observability",
+    "is_warmup_session": "voice_agent_core.runtime",
+    "list_llm_providers": "voice_agent_core.providers",
+    "list_stt_providers": "voice_agent_core.providers",
+    "list_tts_providers": "voice_agent_core.providers",
+    "llm_models": "voice_agent_core.providers",
+    "load_env_walking_up": "voice_agent_core.config",
+    "load_yaml": "voice_agent_core.config",
+    "provider_config_schema": "voice_agent_core.providers",
+    "register_llm": "voice_agent_core.providers",
+    "register_stt": "voice_agent_core.providers",
+    "register_tts": "voice_agent_core.providers",
+    "setup_observability": "voice_agent_core.observability",
+    "shutdown_observability": "voice_agent_core.observability",
+    "stt_models": "voice_agent_core.providers",
+    "summarize_transcript": "voice_agent_core.transcript",
+    "tts_models": "voice_agent_core.providers",
+    "warm_tts": "voice_agent_core.runtime",
+}
+
+_SUBMODULES = {
+    "config",
+    "deepgram",
+    "fish",
+    "idle",
+    "inworld",
+    "llm",
+    "notify",
+    "observability",
+    "pipeline",
+    "providers",
+    "runtime",
+    "stt",
+    "transcript",
+}
+
+__all__ = [*_LAZY_EXPORTS, "__version__"]
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve public re-exports lazily on first access."""
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is None and name in _SUBMODULES:
+        module_name = f"{__name__}.{name}"
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = import_module(module_name)
+    value = module if name in _SUBMODULES else getattr(module, name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), *__all__})

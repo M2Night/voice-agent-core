@@ -31,7 +31,7 @@ Usage::
 from __future__ import annotations
 
 import time
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import httpx
 from pydantic import BaseModel, Field
@@ -77,6 +77,15 @@ class NotificationPayload(BaseModel):
     fields: list[NotificationField] = Field(default_factory=list)
     urgency: Literal["normal", "urgent"] = "normal"
     link_url: str | None = None
+
+
+@runtime_checkable
+class Notifier(Protocol):
+    """Provider-agnostic async notification sender."""
+
+    async def send(self, payload: NotificationPayload) -> None:
+        """Dispatch a notification payload."""
+        ...
 
 
 class _SlackServerError(Exception):
@@ -211,4 +220,4 @@ class SlackNotifier:
                     resp.raise_for_status()
 
 
-__all__ = ["NotificationField", "NotificationPayload", "SlackNotifier"]
+__all__ = ["NotificationField", "NotificationPayload", "Notifier", "SlackNotifier"]

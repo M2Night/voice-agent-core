@@ -31,16 +31,16 @@ The agent will greet you and respond through Fish Audio's voice. Try interruptin
 You should see, in the worker terminal:
 
 - `fish_tts.ready` — TTS initialized
-- `llm.build  backend=livekit` — LLM constructed
+- `llm.build provider=openrouter` — LLM constructed (or your selected provider)
 - `pipeline.build_start` / `pipeline.build_done` — pipeline assembled
 - After your first utterance:
-  - `fish_stt.transcript` — Fish transcribed your speech
+  - STT transcript logs from your selected provider (`deepgram` by default; `fish_stt.transcript` when `STT_PROVIDER=fish`)
   - `fish_tts.first_audio_frame` — Fish produced the first audio frame; latency in `stream_open_to_audio_ms`
   - `fish_tts.metrics` — full TTS metrics (TTFB, RTF, chars)
 
 A successful run proves:
-- Fish STT can transcribe your speech
-- LLM (LiveKit Inference) generates replies
+- The selected STT provider can transcribe your speech
+- The selected LLM provider generates replies
 - Fish TTS synthesizes audio at < 500ms TTFB
 - VAD + turn detection drive natural turn-taking
 - The whole pipeline assembles via one `build_pipeline()` call
@@ -50,6 +50,8 @@ A successful run proves:
 | Symptom | Likely cause |
 |---|---|
 | `FISH_API_KEY is required` | `.env` not loaded — check it's at `examples/.env` |
+| `DEEPGRAM_API_KEY is required` | Default STT is Deepgram; set the key or switch `STT_PROVIDER=fish` |
+| `OPENROUTER_API_KEY is required` | Default LLM is OpenRouter; set the key or switch `LLM_PROVIDER=livekit` / `custom` |
 | `LIVEKIT_API_KEY and LIVEKIT_API_SECRET are both required` | Same — also need API secret, not just key |
 | Agent connects but won't speak | Mic muted in Playground, or VAD not detecting speech (check `vad` logs) |
 | `Playback failed` in Playground | Browser audio output muted/restricted |
