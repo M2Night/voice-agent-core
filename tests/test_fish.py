@@ -7,15 +7,16 @@ endpoint. We test construction, defaults, and error paths instead.
 from __future__ import annotations
 
 import array
+import asyncio
 from types import SimpleNamespace
 
 import aiohttp
 import msgpack
 import pytest
-from livekit.agents import APIStatusError
+from livekit.agents import APIConnectionError, APIStatusError, APITimeoutError
 
 from voice_agent_core.config import BaseAgentSettings
-from voice_agent_core.fish import build_fish_stt, build_fish_tts
+from voice_agent_core.fish import FishSTT, build_fish_stt, build_fish_tts
 from voice_agent_core.fish.tts import (
     _fade_pcm_bytes,
     _native_start_request,
@@ -48,6 +49,7 @@ class TestBuildFishTTS:
         assert tts._impl == "native"
         assert tts._min_chunk_length == 20
         assert tts._onset_fade_ms == 8
+        assert tts._recv_timeout_s == 15.0
 
     def test_optimizations_are_hardcoded_not_env_overridable(
         self, monkeypatch: pytest.MonkeyPatch
@@ -96,6 +98,12 @@ class TestBuildFishTTS:
         tts = build_fish_tts(s)
         assert tts.voice_id == "voice-abc"
 
+    def test_recv_timeout_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("FISH_TTS_RECV_TIMEOUT_S", "7.5")
+        tts = build_fish_tts(BaseAgentSettings())
+        assert tts._recv_timeout_s == 7.5
+
 
 class TestBuildFishSTT:
     def test_requires_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,6 +145,70 @@ class TestBuildFishSTT:
         s = BaseAgentSettings()
         stt = build_fish_stt(s)
         assert stt._opts.language == "en"
+
+    async def test_connection_error_retries_then_succeeds(self) -> None:
+        stt = FishSTT(api_key="test-key", max_retries=3)
+        calls = 0
+
+        async def fake_post_once(**kwargs):
+            nonlocal calls
+            calls += 1
+            if calls < 3:
+                raise APIConnectionError("temporary connection failure")
+            return {"text": "ok"}, "req-1", 200
+
+        stt._post_once = fake_post_once  # type: ignore[method-assign]
+
+        payload, request_id, status = await stt._post_with_retry(
+            wav_bytes=b"wav",
+            language="en",
+            timeout_s=1.0,
+        )
+
+        assert calls == 3
+        assert payload == {"text": "ok"}
+        assert request_id == "req-1"
+        assert status == 200
+
+    async def test_timeout_error_does_not_retry(self) -> None:
+        stt = FishSTT(api_key="test-key", max_retries=3)
+        calls = 0
+
+        async def fake_post_once(**kwargs):
+            nonlocal calls
+            calls += 1
+            raise APITimeoutError("request timed out")
+
+        stt._post_once = fake_post_once  # type: ignore[method-assign]
+
+        with pytest.raises(APITimeoutError):
+            await stt._post_with_retry(
+                wav_bytes=b"wav",
+                language="en",
+                timeout_s=1.0,
+            )
+
+        assert calls == 1
+
+    async def test_builtin_timeout_converts_to_api_timeout_without_retry(self) -> None:
+        stt = FishSTT(api_key="test-key", max_retries=3)
+        calls = 0
+
+        async def fake_post_once(**kwargs):
+            nonlocal calls
+            calls += 1
+            raise TimeoutError()
+
+        stt._post_once = fake_post_once  # type: ignore[method-assign]
+
+        with pytest.raises(APITimeoutError):
+            await stt._post_with_retry(
+                wav_bytes=b"wav",
+                language="en",
+                timeout_s=1.0,
+            )
+
+        assert calls == 1
 
 
 class TestToMs:
@@ -201,6 +273,12 @@ class _FakeWS:
         return SimpleNamespace(type=aiohttp.WSMsgType.CLOSED, data=None, extra=None)
 
 
+class _SlowWS(_FakeWS):
+    async def receive(self):
+        await asyncio.sleep(1)
+        return await super().receive()
+
+
 class _FakeEmitter:
     def __init__(self) -> None:
         self.pushed: list = []
@@ -231,6 +309,7 @@ def _native_self(monkeypatch: pytest.MonkeyPatch, input_items: list) -> SimpleNa
     return SimpleNamespace(
         _opts=tts._opts,
         _min_chunk_length=20,
+        _recv_timeout_s=15.0,
         _FlushSentinel=_FlushSentinel,
         _mark_started=lambda: None,
         _input_ch=_aiter(),
@@ -267,4 +346,12 @@ class TestNativeRunWs:
         fake = _native_self(monkeypatch, [])
         ws = _FakeWS([SimpleNamespace(type=aiohttp.WSMsgType.CLOSED, data=None, extra=None)])
         with pytest.raises(APIStatusError):
+            await _NativeFishStream._run_ws(fake, ws, _FakeEmitter())
+
+    async def test_receive_inactivity_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake = _native_self(monkeypatch, [])
+        fake._recv_timeout_s = 0.01
+        ws = _SlowWS([_binary({"event": "finish"})])
+
+        with pytest.raises(APITimeoutError):
             await _NativeFishStream._run_ws(fake, ws, _FakeEmitter())

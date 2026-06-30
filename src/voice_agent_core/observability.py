@@ -186,6 +186,7 @@ class MetricNames:
     FISH_TTS_ERRORS = "fish_tts.errors"
     FISH_STT_LATENCY_MS = "fish_stt.latency_ms"
     FISH_STT_ERRORS = "fish_stt.errors"
+    STT_SEGMENT_DROPPED = "stt.segment_dropped"
 
     # --- LLM ---
     LLM_LATENCY_MS = "llm.latency_ms"

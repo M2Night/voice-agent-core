@@ -37,6 +37,15 @@ class TestBuildLLM:
     def test_livekit_backend_returns_inference_llm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from livekit.agents import inference
+
+        calls: list[dict[str, object]] = []
+
+        class FakeInferenceLLM:
+            def __init__(self, **kwargs: object) -> None:
+                calls.append(kwargs)
+
+        monkeypatch.setattr(inference, "LLM", FakeInferenceLLM)
         monkeypatch.setenv("LLM_PROVIDER", "livekit")
         monkeypatch.setenv("LLM_MODEL", "openai/gpt-5.2-chat-latest")
         monkeypatch.setenv("LIVEKIT_API_KEY", "test-key")
@@ -45,9 +54,8 @@ class TestBuildLLM:
 
         llm = build_llm(s)
 
-        from livekit.agents import inference
-
-        assert isinstance(llm, inference.LLM)
+        assert isinstance(llm, FakeInferenceLLM)
+        assert calls == [{"model": "openai/gpt-5.2-chat-latest"}]
 
     def test_livekit_backend_requires_api_key_and_secret(
         self, monkeypatch: pytest.MonkeyPatch
@@ -73,6 +81,17 @@ class TestBuildLLM:
     def test_openrouter_backend_with_key_returns_openai_llm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from livekit.plugins import openai
+
+        calls: list[dict[str, object]] = []
+
+        class FakeOpenRouterLLM:
+            @classmethod
+            def with_openrouter(cls, **kwargs: object):
+                calls.append(kwargs)
+                return cls()
+
+        monkeypatch.setattr(openai, "LLM", FakeOpenRouterLLM)
         monkeypatch.setenv("LLM_PROVIDER", "openrouter")
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-fake")
         monkeypatch.setenv("LLM_MODEL", "anthropic/claude-sonnet-4-6")
@@ -80,9 +99,14 @@ class TestBuildLLM:
 
         llm = build_llm(s)
 
-        from livekit.plugins import openai
-
-        assert isinstance(llm, openai.LLM)
+        assert isinstance(llm, FakeOpenRouterLLM)
+        assert calls == [
+            {
+                "model": "anthropic/claude-sonnet-4-6",
+                "api_key": "sk-test-fake",
+                "app_name": "voice-agent-core",
+            }
+        ]
 
 
 class TestBuildCustomLLM:

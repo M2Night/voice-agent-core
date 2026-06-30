@@ -29,7 +29,7 @@ from livekit.agents.types import NOT_GIVEN, NotGivenOr
 from livekit.agents.utils import is_given
 from tenacity import (
     AsyncRetrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -187,7 +187,10 @@ class FishSTT(stt.STT):
         they're the caller's problem (bad audio, bad key, etc.).
         """
         retryer = AsyncRetrying(
-            retry=retry_if_exception_type(aiohttp.ClientError),
+            retry=retry_if_exception(
+                lambda exc: isinstance(exc, APIConnectionError)
+                and not isinstance(exc, APITimeoutError)
+            ),
             stop=stop_after_attempt(self._opts.max_retries),
             wait=wait_exponential(multiplier=0.5, min=0.5, max=2.0),
             reraise=True,

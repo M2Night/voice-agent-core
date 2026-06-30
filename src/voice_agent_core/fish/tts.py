@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 import msgpack
 from livekit import rtc
-from livekit.agents import APIConnectOptions, APIStatusError, tts, utils
+from livekit.agents import APIConnectOptions, APIStatusError, APITimeoutError, tts, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
 from livekit.plugins import fishaudio
 from livekit.plugins.fishaudio.tts import SynthesizeStream as _UpstreamFishStream
@@ -87,12 +87,14 @@ class FishTTS(fishaudio.TTS):
         impl: str = "native",
         min_chunk_length: int = 20,
         onset_fade_ms: int = 0,
+        recv_timeout_s: float = 15.0,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._impl = impl
         self._min_chunk_length = min_chunk_length
         self._onset_fade_ms = onset_fade_ms
+        self._recv_timeout_s = recv_timeout_s
         self.on("metrics_collected", self._on_metrics)
         self.on("error", self._on_error)
         log.info(
@@ -106,6 +108,7 @@ class FishTTS(fishaudio.TTS):
             impl=impl,
             min_chunk_length=min_chunk_length,
             onset_fade_ms=onset_fade_ms,
+            recv_timeout_s=recv_timeout_s,
         )
 
     def synthesize(
@@ -127,6 +130,7 @@ class FishTTS(fishaudio.TTS):
                 tts=self,
                 conn_options=conn_options,
                 min_chunk_length=self._min_chunk_length,
+                recv_timeout_s=self._recv_timeout_s,
             )
             # Track for aclose() like the upstream stream() does.
             self._streams.add(inner)
@@ -220,9 +224,11 @@ class _NativeFishStream(_UpstreamFishStream):
         tts: FishTTS,
         conn_options: APIConnectOptions,
         min_chunk_length: int,
+        recv_timeout_s: float,
     ) -> None:
         super().__init__(tts=tts, conn_options=conn_options)
         self._min_chunk_length = min_chunk_length
+        self._recv_timeout_s = recv_timeout_s
 
     async def _run_ws(
         self,
@@ -258,7 +264,15 @@ class _NativeFishStream(_UpstreamFishStream):
 
         async def recv_task() -> None:
             while True:
-                msg = await ws.receive()
+                try:
+                    msg = await asyncio.wait_for(
+                        ws.receive(), timeout=self._recv_timeout_s
+                    )
+                except TimeoutError as exc:
+                    raise APITimeoutError(
+                        "Fish Audio websocket receive timed out "
+                        f"after {self._recv_timeout_s}s of inactivity"
+                    ) from exc
                 if msg.type in (
                     aiohttp.WSMsgType.CLOSED,
                     aiohttp.WSMsgType.CLOSE,
@@ -545,6 +559,7 @@ def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
         "impl": _IMPL,
         "min_chunk_length": _MIN_CHUNK_LENGTH,
         "onset_fade_ms": _ONSET_FADE_MS,
+        "recv_timeout_s": fish.tts_recv_timeout_s,
     }
     if settings.tts_voice:
         kwargs["voice_id"] = settings.tts_voice

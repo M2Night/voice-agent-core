@@ -49,6 +49,14 @@ class FishSettings(BaseSettings):
         default="balanced",
         description="Fish TTS latency/quality tradeoff (low | balanced | normal)",
     )
+    tts_recv_timeout_s: float = Field(
+        default=15.0,
+        gt=0,
+        description=(
+            "Fish TTS websocket inactivity timeout in seconds. The timer applies to "
+            "each receive() call and resets whenever Fish sends a frame."
+        ),
+    )
 
 
 __all__ = ["FishSettings", "FishTTSLatencyMode"]

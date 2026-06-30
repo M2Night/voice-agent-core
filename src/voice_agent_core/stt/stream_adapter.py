@@ -18,7 +18,12 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterable
 
-from livekit.agents import utils
+from livekit.agents import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    utils,
+)
 from livekit.agents.stt import (
     STT,
     RecognizeStream,
@@ -34,9 +39,18 @@ from livekit.agents.types import (
 )
 from livekit.agents.vad import VAD, VADEventType
 
+from voice_agent_core.observability import MetricNames, get_logger, get_meter
+
 DEFAULT_STREAM_ADAPTER_API_CONNECT_OPTIONS = APIConnectOptions(
     max_retry=0,
     timeout=DEFAULT_API_CONNECT_OPTIONS.timeout,
+)
+
+log = get_logger(__name__)
+_meter = get_meter("voice_agent_core.stt.stream_adapter")
+_c_segment_dropped = _meter.create_counter(
+    MetricNames.STT_SEGMENT_DROPPED,
+    description="VAD speech segments dropped after adapted batch-STT recognition failed",
 )
 
 
@@ -174,11 +188,31 @@ class _StreamAdapterStream(RecognizeStream):
                 if not event.frames:
                     continue
 
-                recognized = await self._wrapped_stt.recognize(
-                    buffer=utils.merge_frames(event.frames),
-                    language=self._language,
-                    conn_options=self._conn_options,
-                )
+                try:
+                    recognized = await self._wrapped_stt.recognize(
+                        buffer=utils.merge_frames(event.frames),
+                        language=self._language,
+                        conn_options=self._conn_options,
+                    )
+                except (APIConnectionError, APITimeoutError, APIStatusError) as exc:
+                    _c_segment_dropped.add(
+                        1,
+                        attributes={
+                            "provider": self._wrapped_stt.provider,
+                            "model": self._wrapped_stt.model,
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                    log.warning(
+                        "stt.stream_adapter_segment_dropped",
+                        provider=self._wrapped_stt.provider,
+                        model=self._wrapped_stt.model,
+                        error=repr(exc),
+                    )
+                    # wrapped_stt.recognize() already emits its own error event, which
+                    # StreamAdapter forwards via _forward_errors. Emitting here would
+                    # duplicate the same failure for observers.
+                    continue
                 alternatives = [
                     alt for alt in recognized.alternatives if alt.text.strip()
                 ]

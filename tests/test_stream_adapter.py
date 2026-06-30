@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from livekit import rtc
+from livekit.agents import APIConnectionError
 from livekit.agents.stt import (
     STT,
     SpeechData,
@@ -31,6 +32,7 @@ class _FakeBatchSTT(STT):
         self.last_language: str | None = None
         self.recognize_calls = 0
         self.closed = False
+        self.error: Exception | None = None
 
     @property
     def model(self) -> str:
@@ -49,6 +51,8 @@ class _FakeBatchSTT(STT):
     ) -> SpeechEvent:
         self.recognize_calls += 1
         self.last_language = language
+        if self.error is not None:
+            raise self.error
         return SpeechEvent(
             type=SpeechEventType.FINAL_TRANSCRIPT,
             request_id="req-1",
@@ -228,6 +232,42 @@ async def test_stream_adapter_skips_blank_transcript() -> None:
 
     assert [event.type for event in events] == [SpeechEventType.END_OF_SPEECH]
     assert wrapped.recognize_calls == 1
+
+
+async def test_stream_adapter_drops_failed_segment_and_keeps_stream_alive() -> None:
+    frame = rtc.AudioFrame(
+        data=b"\x00" * 320,
+        sample_rate=16000,
+        num_channels=1,
+        samples_per_channel=160,
+    )
+    vad = _FakeVAD(
+        [
+            VADEvent(
+                type=VADEventType.END_OF_SPEECH,
+                samples_index=160,
+                timestamp=0.01,
+                speech_duration=0.01,
+                silence_duration=0,
+                frames=[frame],
+            ),
+        ]
+    )
+    wrapped = _FakeBatchSTT()
+    wrapped.error = APIConnectionError("temporary STT failure")
+    adapter = StreamAdapter(stt=wrapped, vad=vad)
+    errors = []
+    adapter.on("error", lambda err: errors.append(err))
+    stream = adapter.stream()
+    stream.push_frame(frame)
+    stream.end_input()
+
+    events = [event async for event in stream]
+
+    assert [event.type for event in events] == [SpeechEventType.END_OF_SPEECH]
+    assert wrapped.recognize_calls == 1
+    assert len(errors) == 1
+    assert isinstance(errors[0].error, APIConnectionError)
 
 
 async def test_stream_adapter_forwards_metrics_once_and_removes_listeners() -> None:
