@@ -39,14 +39,27 @@ class TestBuiltinRegistration:
     def test_fish_tts_catalog(self) -> None:
         # Catalog feeds a future provider -> model dropdown.
         assert tts_models("fish") == ("s1", "s2-pro", "s2.1-pro")
+        assert providers._TTS_PROVIDERS["fish"].default_model == "s2-pro"
+        assert providers._TTS_PROVIDERS["fish"].requires_credentials == ("FISH_API_KEY",)
+        assert providers._TTS_PROVIDERS["fish"].supports_streaming is True
 
     def test_inworld_tts_catalog(self) -> None:
         assert "inworld" in list_tts_providers()
         assert tts_models("inworld") == ("inworld-tts-2", "inworld-tts-1.5-max")
+        assert providers._TTS_PROVIDERS["inworld"].default_model == "inworld-tts-2"
+        assert providers._TTS_PROVIDERS["inworld"].requires_credentials == (
+            "INWORLD_API_KEY",
+        )
+        assert providers._TTS_PROVIDERS["inworld"].supports_streaming is True
 
     def test_deepgram_registered_with_catalog(self) -> None:
         assert "deepgram" in list_stt_providers()
         assert providers.stt_models("deepgram") == ("nova-3", "nova-2")
+        assert providers._STT_PROVIDERS["deepgram"].default_model == "nova-3"
+        assert providers._STT_PROVIDERS["deepgram"].requires_credentials == (
+            "DEEPGRAM_API_KEY",
+        )
+        assert providers._STT_PROVIDERS["deepgram"].supports_streaming is True
 
 
 class TestDeepgram:
@@ -76,6 +89,7 @@ class TestDeepgram:
 
         build_stt(BaseAgentSettings())
 
+        assert calls[-1]["model"] == "nova-3"
         assert calls[-1]["language"] == "en"
 
     def test_explicit_multi_language_passed_to_plugin(
@@ -109,6 +123,56 @@ class TestDispatch:
             assert build_tts(BaseAgentSettings()) is sentinel
         finally:
             providers._TTS_PROVIDERS.pop("_fake_tts", None)
+
+    def test_build_tts_injects_provider_default_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[str] = []
+        sentinel = object()
+
+        def build(settings: BaseAgentSettings):
+            seen.append(settings.tts_model)
+            return sentinel
+
+        register_tts(
+            TTSProvider(
+                name="_default_tts",
+                build=build,
+                default_model="provider-default",
+            )
+        )
+        monkeypatch.setenv("TTS_PROVIDER", "_default_tts")
+        monkeypatch.delenv("TTS_MODEL", raising=False)
+        try:
+            assert build_tts(BaseAgentSettings()) is sentinel
+            assert seen == ["provider-default"]
+        finally:
+            providers._TTS_PROVIDERS.pop("_default_tts", None)
+
+    def test_build_tts_keeps_explicit_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[str] = []
+        sentinel = object()
+
+        def build(settings: BaseAgentSettings):
+            seen.append(settings.tts_model)
+            return sentinel
+
+        register_tts(
+            TTSProvider(
+                name="_explicit_tts",
+                build=build,
+                default_model="provider-default",
+            )
+        )
+        monkeypatch.setenv("TTS_PROVIDER", "_explicit_tts")
+        monkeypatch.setenv("TTS_MODEL", "caller-model")
+        try:
+            assert build_tts(BaseAgentSettings()) is sentinel
+            assert seen == ["caller-model"]
+        finally:
+            providers._TTS_PROVIDERS.pop("_explicit_tts", None)
 
     def test_unknown_provider_raises_with_available_list(
         self, monkeypatch: pytest.MonkeyPatch
@@ -251,7 +315,7 @@ class TestInworldTTS:
             "language": "en-US",
         }
 
-    def test_build_maps_fish_default_model_to_inworld_default(
+    def test_build_uses_inworld_default_when_model_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         calls: list[dict[str, object]] = []
@@ -270,6 +334,26 @@ class TestInworldTTS:
         build_tts(BaseAgentSettings())
 
         assert calls[-1]["model"] == "inworld-tts-2"
+
+    def test_build_keeps_explicit_inworld_model_even_if_it_is_fish_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeInworldTTS:
+            def __init__(self, **kwargs: object) -> None:
+                calls.append(kwargs)
+
+        fake = ModuleType("livekit.plugins.inworld")
+        fake.TTS = FakeInworldTTS  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "livekit.plugins.inworld", fake)
+        monkeypatch.setenv("TTS_PROVIDER", "inworld")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
+        monkeypatch.setenv("INWORLD_API_KEY", "test-key")
+
+        build_tts(BaseAgentSettings())
+
+        assert calls[-1]["model"] == "s2-pro"
 
     def test_provider_config_schema_unknown_layer_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown layer"):

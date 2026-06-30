@@ -6,10 +6,11 @@ Re-exports::
 """
 
 from voice_agent_core.fish.settings import FishSettings, FishTTSLatencyMode
-from voice_agent_core.fish.stt import FishSTT, build_fish_stt
+from voice_agent_core.fish.stt import FISH_ASR_MODEL, FishSTT, build_fish_stt
 from voice_agent_core.fish.tts import FishTTS, build_fish_tts
 
 __all__ = [
+    "FISH_ASR_MODEL",
     "FishSTT",
     "FishSettings",
     "FishTTS",

@@ -35,7 +35,12 @@ from livekit.agents import stt as agents_stt
 from livekit.agents import tts as agents_tts
 
 from voice_agent_core.deepgram import DeepgramSettings, build_deepgram_stt
-from voice_agent_core.fish import FishSettings, build_fish_stt, build_fish_tts
+from voice_agent_core.fish import (
+    FISH_ASR_MODEL,
+    FishSettings,
+    build_fish_stt,
+    build_fish_tts,
+)
 from voice_agent_core.inworld import InworldSettings, build_inworld_tts
 from voice_agent_core.llm import (
     CustomLLMSettings,
@@ -62,6 +67,12 @@ class STTProvider:
     settings_cls: type[BaseSettings] | None = None
     """Provider-specific settings class (env-driven). Powers a frontend's
     provider-specific config form via :func:`provider_config_schema`."""
+    default_model: str = ""
+    """Provider-owned default model id. Empty = no registry default."""
+    requires_credentials: tuple[str, ...] = ()
+    """Environment variables required to use this provider."""
+    supports_streaming: bool = False
+    """Whether the provider's native STT implementation streams audio."""
 
 
 @dataclass(frozen=True)
@@ -74,6 +85,12 @@ class TTSProvider:
     """Selectable model ids. Empty = single/fixed model or free-form."""
     settings_cls: type[BaseSettings] | None = None
     """Provider-specific settings class (env-driven)."""
+    default_model: str = ""
+    """Provider-owned default model id. Empty = no registry default."""
+    requires_credentials: tuple[str, ...] = ()
+    """Environment variables required to use this provider."""
+    supports_streaming: bool = True
+    """Whether the provider can synthesize through LiveKit's streaming TTS path."""
 
 
 @dataclass(frozen=True)
@@ -104,6 +121,16 @@ def _require(registry: dict[str, _P], name: str, layer: str) -> _P:
         ) from None
 
 
+def _with_default_model(
+    settings: BaseAgentSettings,
+    field: str,
+    default_model: str,
+) -> BaseAgentSettings:
+    if not default_model or getattr(settings, field):
+        return settings
+    return settings.model_copy(update={field: default_model})
+
+
 # --- Registration (idempotent; re-registering a name overrides it) ---
 
 
@@ -127,12 +154,18 @@ def register_llm(provider: LLMProvider) -> None:
 
 def build_stt(settings: BaseAgentSettings) -> agents_stt.STT:
     """Build the STT component for ``settings.stt_provider``."""
-    return _require(_STT_PROVIDERS, settings.stt_provider, "STT").build(settings)
+    provider = _require(_STT_PROVIDERS, settings.stt_provider, "STT")
+    return provider.build(
+        _with_default_model(settings, "stt_model", provider.default_model)
+    )
 
 
 def build_tts(settings: BaseAgentSettings) -> agents_tts.TTS:
     """Build the TTS component for ``settings.tts_provider``."""
-    return _require(_TTS_PROVIDERS, settings.tts_provider, "TTS").build(settings)
+    provider = _require(_TTS_PROVIDERS, settings.tts_provider, "TTS")
+    return provider.build(
+        _with_default_model(settings, "tts_model", provider.default_model)
+    )
 
 
 def build_llm(settings: BaseAgentSettings) -> agents_llm.LLM:
@@ -196,13 +229,25 @@ def provider_config_schema(layer: str, name: str) -> dict | None:
 
 # --- Built-in providers (Fish-first) ---
 
-register_stt(STTProvider(name="fish", build=build_fish_stt, settings_cls=FishSettings))
+register_stt(
+    STTProvider(
+        name="fish",
+        build=build_fish_stt,
+        settings_cls=FishSettings,
+        default_model=FISH_ASR_MODEL,
+        requires_credentials=("FISH_API_KEY",),
+        supports_streaming=False,
+    )
+)
 register_stt(
     STTProvider(
         name="deepgram",
         build=build_deepgram_stt,
         models=("nova-3", "nova-2"),
         settings_cls=DeepgramSettings,
+        default_model="nova-3",
+        requires_credentials=("DEEPGRAM_API_KEY",),
+        supports_streaming=True,
     )
 )
 register_tts(
@@ -211,6 +256,9 @@ register_tts(
         build=build_fish_tts,
         models=("s1", "s2-pro", "s2.1-pro"),
         settings_cls=FishSettings,
+        default_model="s2-pro",
+        requires_credentials=("FISH_API_KEY",),
+        supports_streaming=True,
     )
 )
 register_tts(
@@ -219,6 +267,9 @@ register_tts(
         build=build_inworld_tts,
         models=("inworld-tts-2", "inworld-tts-1.5-max"),
         settings_cls=InworldSettings,
+        default_model="inworld-tts-2",
+        requires_credentials=("INWORLD_API_KEY",),
+        supports_streaming=True,
     )
 )
 register_llm(LLMProvider(name="livekit", build=build_livekit_llm))

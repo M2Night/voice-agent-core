@@ -92,11 +92,10 @@ class BaseAgentSettings(BaseSettings):
         description="TTS provider name; must be registered in providers.py (default 'fish')",
     )
     tts_model: str = Field(
-        default="s2-pro",
+        default="",
         description=(
-            "TTS model id for the chosen provider. For Fish: 's2-pro' (default) is "
-            "clean in LiveKit 1.5.x; 's2.1-pro' produces audible static — listen-test "
-            "before switching."
+            "TTS model id for the chosen provider. '' = provider default from the "
+            "TTS provider registry (Fish: 's2-pro', Inworld: 'inworld-tts-2')."
         ),
     )
     tts_voice: str = Field(

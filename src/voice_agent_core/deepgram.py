@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-_DEFAULT_MODEL = "nova-3"
 _DEFAULT_LANGUAGE = "en"
 
 
@@ -49,16 +48,20 @@ class DeepgramSettings(BaseSettings):
 def build_deepgram_stt(settings: BaseAgentSettings) -> agents_stt.STT:
     """Construct a streaming Deepgram STT from a settings object.
 
-    Reads ``stt_model`` (defaults to ``nova-3``) and ``stt_language``. Deepgram
-    streaming needs an explicit language hint; the default is ``en`` for the common
-    English smoke/dev path. Set ``stt_language=multi`` explicitly for Nova-3
+    Reads ``stt_model`` and ``stt_language``. The provider registry resolves the
+    default model before calling this builder; direct callers must pass one explicitly.
+    Deepgram streaming needs an explicit language hint; the default is ``en`` for the
+    common English smoke/dev path. Set ``stt_language=multi`` explicitly for Nova-3
     multilingual/code-switching. ``DEEPGRAM_API_KEY`` comes from ``DeepgramSettings``.
     """
     deepgram_settings = DeepgramSettings()
     if not deepgram_settings.api_key:
         raise ValueError("DEEPGRAM_API_KEY is required to build Deepgram STT")
 
-    model = settings.stt_model or _DEFAULT_MODEL
+    if not settings.stt_model:
+        raise ValueError("STT_MODEL is required to build Deepgram STT")
+
+    model = settings.stt_model
     language = settings.stt_language or _DEFAULT_LANGUAGE
 
     # RISK: this onboards Deepgram via LiveKit's first-party plugin. It's the lowest-

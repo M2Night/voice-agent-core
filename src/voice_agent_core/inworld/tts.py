@@ -13,20 +13,17 @@ from voice_agent_core.inworld.settings import InworldSettings
 if TYPE_CHECKING:
     from voice_agent_core.config import BaseAgentSettings
 
-_FISH_DEFAULT_MODELS = {"", "s2-pro"}
-_INWORLD_DEFAULT_MODEL = "inworld-tts-2"
-
-
-def _resolve_model(model: str) -> str:
-    """Use an Inworld default when provider switching leaves Fish's default model."""
-    return _INWORLD_DEFAULT_MODEL if model in _FISH_DEFAULT_MODELS else model
-
-
 def build_inworld_tts(settings: BaseAgentSettings):
-    """Construct LiveKit's Inworld TTS plugin from a settings object."""
+    """Construct LiveKit's Inworld TTS plugin from a settings object.
+
+    The provider registry resolves Inworld's default model before calling this
+    builder; direct callers must pass ``settings.tts_model`` explicitly.
+    """
     inworld_settings = InworldSettings()
     if not inworld_settings.api_key:
         raise ValueError("INWORLD_API_KEY is required to build Inworld TTS")
+    if not settings.tts_model:
+        raise ValueError("TTS_MODEL is required to build Inworld TTS")
 
     try:
         from livekit.plugins import inworld
@@ -37,7 +34,7 @@ def build_inworld_tts(settings: BaseAgentSettings):
 
     kwargs: dict[str, Any] = {
         "api_key": inworld_settings.api_key,
-        "model": _resolve_model(settings.tts_model),
+        "model": settings.tts_model,
         "encoding": "PCM",
     }
     if settings.tts_voice:

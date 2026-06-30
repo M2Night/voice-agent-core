@@ -20,9 +20,11 @@ Subclasses ``livekit.plugins.fishaudio.TTS`` and adds:
 
 Policy vs mechanism: :func:`build_fish_tts` fixes the optimization policy — pcm output,
 ``impl="native"``, ``min_chunk_length=20``, ``onset_fade_ms=8`` (hardcoded module
-constants; not env-configurable). The ``FishTTS`` constructor still accepts these as
-kwargs so the mechanism stays available for tests / direct construction; only
-``FISH_API_KEY`` and ``FISH_TTS_LATENCY_MODE`` are env knobs (see
+constants; not env-configurable). The provider registry owns the default model
+(``s2-pro``) and resolves it before calling the builder. The ``FishTTS`` constructor
+still accepts these as kwargs so the mechanism stays available for tests / direct
+construction; only ``FISH_API_KEY``, ``FISH_TTS_LATENCY_MODE`` and
+``FISH_TTS_RECV_TIMEOUT_S`` are env knobs (see
 ``voice_agent_core.fish.settings.FishSettings``).
 """
 
@@ -542,14 +544,18 @@ _ONSET_FADE_MS = 8
 def build_fish_tts(settings: BaseAgentSettings) -> FishTTS:
     """Construct an instrumented Fish TTS from a settings object.
 
-    Generic model/voice come from ``settings`` (``TTS_MODEL`` / ``TTS_VOICE``); the Fish
-    API key and latency mode from :class:`~voice_agent_core.fish.settings.FishSettings`
-    (``FISH_API_KEY`` / ``FISH_TTS_LATENCY_MODE``). The remaining Fish TTS behavior is a
-    hardcoded optimization (see the module constants above).
+    Generic model/voice come from ``settings`` (``TTS_MODEL`` / ``TTS_VOICE``); the
+    provider registry resolves Fish's default model before calling this builder. Direct
+    callers must pass ``settings.tts_model`` explicitly. The Fish API key and latency
+    mode come from :class:`~voice_agent_core.fish.settings.FishSettings`
+    (``FISH_API_KEY`` / ``FISH_TTS_LATENCY_MODE``). The remaining Fish TTS behavior is
+    a hardcoded optimization (see the module constants above).
     """
     fish = FishSettings()
     if not fish.api_key:
         raise ValueError("FISH_API_KEY is required to build Fish TTS")
+    if not settings.tts_model:
+        raise ValueError("TTS_MODEL is required to build Fish TTS")
 
     kwargs: dict[str, Any] = {
         "api_key": fish.api_key,

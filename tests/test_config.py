@@ -97,7 +97,7 @@ class TestBaseAgentSettings:
         assert s.tts_provider == "fish"
         assert s.llm_provider == "openrouter"
         assert s.llm_model == "openai/gpt-5.4-mini"
-        assert s.tts_model == "s2-pro"
+        assert s.tts_model == ""
         assert s.tts_voice == ""
         # Provider-specific knobs (fish_tts_*) + credentials moved off BaseAgentSettings
         # to provider settings classes (FishSettings/DeepgramSettings/OpenRouterSettings;

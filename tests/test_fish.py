@@ -34,6 +34,7 @@ class TestBuildFishTTS:
 
     def test_constructs_with_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
         for k in ("FISH_TTS_OUTPUT_FORMAT", "FISH_TTS_SAMPLE_RATE", "FISH_TTS_IMPL",
                   "FISH_TTS_MIN_CHUNK_LENGTH", "FISH_TTS_ONSET_FADE_MS"):
             monkeypatch.delenv(k, raising=False)
@@ -51,12 +52,22 @@ class TestBuildFishTTS:
         assert tts._onset_fade_ms == 8
         assert tts._recv_timeout_s == 15.0
 
+    def test_direct_builder_requires_resolved_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.delenv("TTS_MODEL", raising=False)
+
+        with pytest.raises(ValueError, match="TTS_MODEL"):
+            build_fish_tts(BaseAgentSettings())
+
     def test_optimizations_are_hardcoded_not_env_overridable(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # pcm / native / onset-fade / min-chunk-length are hardcoded optimizations —
         # stray FISH_TTS_* env must NOT change them (only FISH_TTS_LATENCY_MODE is a knob).
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
         monkeypatch.setenv("FISH_TTS_OUTPUT_FORMAT", "wav")
         monkeypatch.setenv("FISH_TTS_IMPL", "plugin")
         monkeypatch.setenv("FISH_TTS_MIN_CHUNK_LENGTH", "40")
@@ -75,6 +86,7 @@ class TestBuildFishTTS:
         # The native start request reuses the upstream field set and adds the
         # min_chunk_length the plugin's request omits.
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
         tts = build_fish_tts(BaseAgentSettings())
         req = _native_start_request(tts._opts, 20)
         assert req["min_chunk_length"] == 20
@@ -86,6 +98,7 @@ class TestBuildFishTTS:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
         monkeypatch.setenv("FISH_TTS_LATENCY_MODE", "low")
         s = BaseAgentSettings()
         tts = build_fish_tts(s)
@@ -93,6 +106,7 @@ class TestBuildFishTTS:
 
     def test_voice_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
         monkeypatch.setenv("TTS_VOICE", "voice-abc")
         s = BaseAgentSettings()
         tts = build_fish_tts(s)
@@ -100,6 +114,7 @@ class TestBuildFishTTS:
 
     def test_recv_timeout_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FISH_API_KEY", "test-key")
+        monkeypatch.setenv("TTS_MODEL", "s2-pro")
         monkeypatch.setenv("FISH_TTS_RECV_TIMEOUT_S", "7.5")
         tts = build_fish_tts(BaseAgentSettings())
         assert tts._recv_timeout_s == 7.5
@@ -300,6 +315,7 @@ def _native_self(monkeypatch: pytest.MonkeyPatch, input_items: list) -> SimpleNa
     exercise the overridden websocket loop without constructing the base stream (which
     needs a running job context)."""
     monkeypatch.setenv("FISH_API_KEY", "test-key")
+    monkeypatch.setenv("TTS_MODEL", "s2-pro")
     tts = build_fish_tts(BaseAgentSettings())
 
     async def _aiter():

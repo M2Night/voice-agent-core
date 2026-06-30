@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from voice_agent_core.config import BaseAgentSettings
 
 DEFAULT_BASE_URL = "https://api.fish.audio"
+FISH_ASR_MODEL = "fish-audio/asr"
 _USER_AGENT = "voice-agent-core/0.1"
 
 log = get_logger(__name__)
@@ -104,7 +105,7 @@ class FishSTT(stt.STT):
 
     @property
     def model(self) -> str:
-        return "fish-audio/asr"
+        return FISH_ASR_MODEL
 
     @property
     def provider(self) -> str:
