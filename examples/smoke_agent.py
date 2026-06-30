@@ -40,6 +40,23 @@ from voice_agent_core import (
 
 log = get_logger(__name__)
 _TRANSCRIPT_CHAR_CAP = 1500
+_BG_TASKS: set[asyncio.Task[None]] = set()
+
+
+def _track_bg_task(task: asyncio.Task[None]) -> None:
+    """Keep fire-and-forget tasks alive and surface failures in logs."""
+    _BG_TASKS.add(task)
+
+    def _done(done_task: asyncio.Task[None]) -> None:
+        _BG_TASKS.discard(done_task)
+        try:
+            done_task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            log.error("background_task.failed", exc_info=True)
+
+    task.add_done_callback(_done)
 
 
 class SmokeSettings(BaseAgentSettings):
@@ -177,10 +194,12 @@ async def entry(ctx: JobContext) -> None:
             )
         )
 
-    # session.on is a sync emitter; schedule the async work on the running loop.
+    # session.on is a sync emitter; keep a strong ref until async close work ends.
     session.on(
         "close",
-        lambda close_event: asyncio.create_task(notify_session_ended(close_event)),
+        lambda close_event: _track_bg_task(
+            asyncio.create_task(notify_session_ended(close_event))
+        ),
     )
 
     # default_room_options() returns RoomOptions with AI Coustics QUAIL_VF_S
