@@ -31,6 +31,11 @@ from voice_agent_core.fish import (
     build_fish_tts,
 )
 from voice_agent_core.idle import IdleWatcher, OnIdle, attach_idle_watcher
+from voice_agent_core.inworld import (
+    InworldSettings,
+    InworldTTSDeliveryMode,
+    build_inworld_tts,
+)
 from voice_agent_core.llm import CustomLLMSettings, OpenRouterSettings
 from voice_agent_core.notify import (
     NotificationField,
@@ -91,6 +96,8 @@ __all__ = [
     "FishTTS",
     "FishTTSLatencyMode",
     "IdleWatcher",
+    "InworldSettings",
+    "InworldTTSDeliveryMode",
     "LLMProvider",
     "LogFormat",
     "LogLevel",
@@ -110,6 +117,7 @@ __all__ = [
     "build_deepgram_stt",
     "build_fish_stt",
     "build_fish_tts",
+    "build_inworld_tts",
     "build_llm",
     "build_pipeline",
     "build_session",

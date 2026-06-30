@@ -13,6 +13,7 @@ authors = [{ name = "Fish Audio FDE" }]
 
 dependencies = [
     "livekit-agents[deepgram,fishaudio,openai,silero,turn-detector]~=1.5",
+    "livekit-plugins-inworld>=1.6,<2",
     "livekit-plugins-noise-cancellation~=0.2",
     "livekit-plugins-ai-coustics~=0.2",
     "pydantic>=2.6",

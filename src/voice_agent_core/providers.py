@@ -36,6 +36,7 @@ from livekit.agents import tts as agents_tts
 
 from voice_agent_core.deepgram import DeepgramSettings, build_deepgram_stt
 from voice_agent_core.fish import FishSettings, build_fish_stt, build_fish_tts
+from voice_agent_core.inworld import InworldSettings, build_inworld_tts
 from voice_agent_core.llm import (
     CustomLLMSettings,
     OpenRouterSettings,
@@ -210,6 +211,14 @@ register_tts(
         build=build_fish_tts,
         models=("s1", "s2-pro", "s2.1-pro"),
         settings_cls=FishSettings,
+    )
+)
+register_tts(
+    TTSProvider(
+        name="inworld",
+        build=build_inworld_tts,
+        models=("inworld-tts-2", "inworld-tts-1.5-max"),
+        settings_cls=InworldSettings,
     )
 )
 register_llm(LLMProvider(name="livekit", build=build_livekit_llm))

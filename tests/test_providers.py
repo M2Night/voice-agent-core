@@ -40,6 +40,10 @@ class TestBuiltinRegistration:
         # Catalog feeds a future provider -> model dropdown.
         assert tts_models("fish") == ("s1", "s2-pro", "s2.1-pro")
 
+    def test_inworld_tts_catalog(self) -> None:
+        assert "inworld" in list_tts_providers()
+        assert tts_models("inworld") == ("inworld-tts-2", "inworld-tts-1.5-max")
+
     def test_deepgram_registered_with_catalog(self) -> None:
         assert "deepgram" in list_stt_providers()
         assert providers.stt_models("deepgram") == ("nova-3", "nova-2")
@@ -164,13 +168,87 @@ class TestProviderSettings:
         assert DeepgramSettings().api_key == "dg"
         assert OpenRouterSettings().api_key == "or"
 
+    def test_inworld_settings_read_prefixed_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from voice_agent_core import InworldSettings
+
+        monkeypatch.setenv("INWORLD_API_KEY", "iw")
+        monkeypatch.setenv("INWORLD_TTS_DELIVERY_MODE", "STABLE")
+        monkeypatch.setenv("INWORLD_TTS_LANGUAGE", "en-US")
+        settings = InworldSettings()
+        assert settings.api_key == "iw"
+        assert settings.tts_delivery_mode == "STABLE"
+        assert settings.tts_language == "en-US"
+
     def test_provider_config_schema(self) -> None:
         # Fish exposes a provider-specific config schema (for a frontend's Fish section).
         schema = providers.provider_config_schema("tts", "fish")
         assert schema is not None
         assert "tts_latency_mode" in schema["properties"]
+        inworld_schema = providers.provider_config_schema("tts", "inworld")
+        assert inworld_schema is not None
+        assert "tts_delivery_mode" in inworld_schema["properties"]
         # livekit LLM has no provider-specific settings.
         assert providers.provider_config_schema("llm", "livekit") is None
+
+
+class TestInworldTTS:
+    def test_build_without_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TTS_PROVIDER", "inworld")
+        monkeypatch.delenv("INWORLD_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="INWORLD_API_KEY"):
+            build_tts(BaseAgentSettings())
+
+    def test_build_passes_generic_and_provider_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeInworldTTS:
+            def __init__(self, **kwargs: object) -> None:
+                calls.append(kwargs)
+
+        fake = ModuleType("livekit.plugins.inworld")
+        fake.TTS = FakeInworldTTS  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "livekit.plugins.inworld", fake)
+        monkeypatch.setenv("TTS_PROVIDER", "inworld")
+        monkeypatch.setenv("TTS_MODEL", "inworld-tts-1.5-max")
+        monkeypatch.setenv("TTS_VOICE", "Ashley")
+        monkeypatch.setenv("INWORLD_API_KEY", "test-key")
+        monkeypatch.setenv("INWORLD_TTS_DELIVERY_MODE", "CREATIVE")
+        monkeypatch.setenv("INWORLD_TTS_LANGUAGE", "en-US")
+
+        build_tts(BaseAgentSettings())
+
+        assert calls[-1] == {
+            "api_key": "test-key",
+            "model": "inworld-tts-1.5-max",
+            "encoding": "PCM",
+            "voice": "Ashley",
+            "delivery_mode": "CREATIVE",
+            "language": "en-US",
+        }
+
+    def test_build_maps_fish_default_model_to_inworld_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeInworldTTS:
+            def __init__(self, **kwargs: object) -> None:
+                calls.append(kwargs)
+
+        fake = ModuleType("livekit.plugins.inworld")
+        fake.TTS = FakeInworldTTS  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "livekit.plugins.inworld", fake)
+        monkeypatch.setenv("TTS_PROVIDER", "inworld")
+        monkeypatch.delenv("TTS_MODEL", raising=False)
+        monkeypatch.setenv("INWORLD_API_KEY", "test-key")
+
+        build_tts(BaseAgentSettings())
+
+        assert calls[-1]["model"] == "inworld-tts-2"
 
     def test_provider_config_schema_unknown_layer_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown layer"):
