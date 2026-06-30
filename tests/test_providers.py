@@ -34,7 +34,7 @@ class TestBuiltinRegistration:
         assert "fish" in list_tts_providers()
 
     def test_llm_providers_registered(self) -> None:
-        assert set(list_llm_providers()) >= {"livekit", "openrouter"}
+        assert set(list_llm_providers()) >= {"livekit", "openrouter", "custom"}
 
     def test_fish_tts_catalog(self) -> None:
         # Catalog feeds a future provider -> model dropdown.
@@ -181,6 +181,23 @@ class TestProviderSettings:
         assert settings.tts_delivery_mode == "STABLE"
         assert settings.tts_language == "en-US"
 
+    def test_custom_llm_settings_read_prefixed_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from voice_agent_core import CustomLLMSettings
+
+        monkeypatch.setenv("CUSTOM_LLM_BASE_URL", "https://endpoint.example/v1")
+        monkeypatch.setenv("CUSTOM_LLM_MODEL", "google/gemma-4")
+        monkeypatch.setenv("CUSTOM_LLM_API_KEY", "secret")
+        monkeypatch.setenv("CUSTOM_LLM_MAX_TOKENS", "60")
+        monkeypatch.setenv("CUSTOM_LLM_TEMPERATURE", "0.3")
+        c = CustomLLMSettings()
+        assert c.base_url == "https://endpoint.example/v1"
+        assert c.model == "google/gemma-4"
+        assert c.api_key == "secret"
+        assert c.max_tokens == 60
+        assert c.temperature == 0.3
+
     def test_provider_config_schema(self) -> None:
         # Fish exposes a provider-specific config schema (for a frontend's Fish section).
         schema = providers.provider_config_schema("tts", "fish")
@@ -191,6 +208,10 @@ class TestProviderSettings:
         assert "tts_delivery_mode" in inworld_schema["properties"]
         # livekit LLM has no provider-specific settings.
         assert providers.provider_config_schema("llm", "livekit") is None
+        # custom LLM exposes its CUSTOM_LLM_* config (for a frontend's custom section).
+        custom_schema = providers.provider_config_schema("llm", "custom")
+        assert custom_schema is not None
+        assert "base_url" in custom_schema["properties"]
 
 
 class TestInworldTTS:
